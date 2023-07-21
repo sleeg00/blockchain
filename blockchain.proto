@@ -1,0 +1,214 @@
+syntax = "proto3";
+
+package blockchain;
+option go_package = "proto/";
+
+
+message SendTxRequest {
+  string address = 1;
+  bytes payload = 2;
+}
+message SendTxResponse {
+  string response = 1;
+}
+message SendDataRequest {
+  bytes data = 1;
+}
+
+message VersionRequest {
+  string address = 1;
+  bytes payload = 2;
+
+}
+
+message VersionResponse {
+  string node_id = 1;
+  int32 height = 2;
+}
+
+message Addr {
+  repeated string addr_list = 1;
+}
+
+message AddrRequest {}
+
+message SendDataResponse{}
+message SendGetBlokcsResponse{}
+message SendAddrResponse{}
+message AddrResponse {
+  Addr addr = 1;
+}
+
+message GetBlocks {
+  string addr_from = 1;
+}
+
+message GetBlocksRequest {
+  GetBlocks get_blocks = 1;
+}
+
+message GetBlocksResponse {
+  repeated bytes block_hashes = 1;
+}
+
+message Inv {
+  string addr_from = 1;
+  string type = 2;
+  repeated bytes items = 3;
+}
+
+message InvRequest {
+  Inv inv = 1;
+}
+
+message InvResponse {}
+
+message Blocks {
+  bytes block_data = 1;
+}
+
+message BlockRequest {
+  Blocks block = 1;
+}
+
+message BlockResponse {}
+message CreateBlockchainRequest {
+  string address = 1;
+  string node_id = 2;
+}
+
+//---------------------------
+message CreateBlockchainResponse {
+    string response = 1;
+}
+
+message CreateWalletRequest {
+  string node_id = 1;
+}
+
+message CreateWalletResponse {
+  string address = 1;
+}
+
+message GetBalanceRequest {
+  string address = 1;
+  string node_id = 2;
+}
+
+message GetBalanceResponse {
+  string address = 1;
+  int32 balance = 2;
+}
+
+message ListAddressesRequest {
+  string node_id = 1;
+}
+
+message ListAddressesResponse {
+  repeated string addresses = 1;
+}
+
+message PrintChainRequest {
+    string node_id = 1;
+}
+
+message PrintChainResponse {
+    repeated Block blocks = 1;
+}
+
+message Block {
+    bytes hash = 1;
+    int32 height = 2;
+    bytes prev_block_hash = 3;
+    repeated TransactionID transactionsID = 4;
+}
+
+message TransactionID {
+   string transaction_id = 1;
+}
+
+message ReindexUTXORequest {
+  string node_id = 1;
+}
+
+message ReindexUTXOResponse {
+  int32 transaction_count = 1;
+}
+
+message SendRequest {
+  string from = 1;
+  string to = 2;
+  int32 amount = 3;
+  string node_id = 4;
+  bool mine_now = 5;
+}
+
+message SendResponse {
+    string response = 1;
+}
+
+message StartNodeRequest {
+  string node_id = 1;
+  string miner_address = 2;
+}
+
+message StartNodeResponse {}
+
+message DeleteTxInMempoolRequest {
+  string tx_id = 1;
+  string address = 2;
+}
+message DeleteTxInMempoolResponse {
+
+}
+
+
+message AddBlockRequest {
+  repeated Transaction transactions = 1;
+  string node_id = 7;
+}
+message AddBlockResponse{
+
+}
+
+message Transaction {
+  bytes id = 1;
+  repeated TXInput vin = 2;
+  repeated TXOutput vout = 3;
+}
+
+message TXInput {
+  bytes txid = 1;
+  int64  vout = 2;
+  bytes signature = 3;
+  bytes pub_key = 4;
+}
+
+message TXOutput {
+  int64 value = 1;
+  bytes pub_key_hash = 2;
+}
+message GetMinerRequest {
+  string miner = 1;
+
+}
+
+message GetMinerResponse {
+  string miner = 1;
+}
+//Version 하는 과정ㅂ ㅗ기
+//------------------------
+service BlockchainService {
+  rpc PrintChain(PrintChainRequest) returns (PrintChainResponse) {}
+  rpc CreateBlockchain(CreateBlockchainRequest) returns (CreateBlockchainResponse) {}
+  rpc CreateWallet(CreateWalletRequest) returns (CreateWalletResponse) {}
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse) {}
+  rpc ListAddresses(ListAddressesRequest) returns (ListAddressesResponse) {}
+  rpc ReindexUTXO(ReindexUTXORequest) returns (ReindexUTXOResponse) {}
+  rpc Send(SendRequest) returns (SendResponse) {}
+  rpc SendTx(SendTxRequest) returns (SendTxResponse);
+  rpc DeleteTxInMempool(DeleteTxInMempoolRequest) returns (DeleteTxInMempoolResponse);
+  rpc Version(VersionRequest) returns (VersionResponse);
+  rpc AddBlock(AddBlockRequest) returns (AddBlockResponse);
+  rpc GetMiner(GetMinerRequest) returns (GetMinerResponse);
+}
