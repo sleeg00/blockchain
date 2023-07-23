@@ -147,10 +147,14 @@ func (u UTXOSet) Update(block *Block) {
 		b := tx.Bucket([]byte(utxoBucket))
 
 		for _, tx := range block.Transactions {
-			if tx.IsCoinbase() == false {
+			if !tx.IsCoinbase() {
 				for _, vin := range tx.Vin {
 					updatedOuts := TXOutputs{}
 					outsBytes := b.Get(vin.Txid)
+					if len(outsBytes) == 0 {
+						// outsBytes가 비어있는 경우 처리 로직 추가
+						continue
+					}
 					outs := DeserializeOutputs(outsBytes)
 
 					for outIdx, out := range outs.Outputs {

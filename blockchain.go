@@ -71,7 +71,9 @@ func CreateBlockchain(address, nodeID string) *Blockchain {
 // 블럭체인의 마지막 Hash값과 블록체인의 주소를 가져옴
 func NewBlockchain(nodeID string) *Blockchain {
 
+	log.Println("NewBlcokchain :" + nodeID)
 	dbFile := fmt.Sprintf(dbFile, nodeID)
+
 	if !dbExists(dbFile) {
 		log.Println(dbFile + " No existing blockchain found. Create one first.")
 		os.Exit(1)
@@ -83,7 +85,36 @@ func NewBlockchain(nodeID string) *Blockchain {
 		log.Panic(err)
 	}
 
-	err = db.Update(func(tx *bolt.Tx) error {
+	err = db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(blocksBucket))
+		tip = b.Get([]byte("l"))
+
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	bc := Blockchain{tip, db}
+
+	return &bc
+}
+func NewBlockchainRead(nodeID string) *Blockchain {
+	log.Println("NewBlcokchain :" + nodeID)
+	dbFile := fmt.Sprintf(dbFile, nodeID)
+
+	if !dbExists(dbFile) {
+		log.Println(dbFile + " No existing blockchain found. Create one first.")
+		os.Exit(1)
+	}
+
+	var tip []byte
+	db, err := bolt.Open(dbFile, 0400, &bolt.Options{ReadOnly: true})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	err = db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		tip = b.Get([]byte("l"))
 
@@ -295,9 +326,11 @@ func (bc *Blockchain) MineBlock(transactions []*Transaction) *Block {
 
 	newBlock := NewBlock(transactions, lastHash, lastHeight+1)
 
+	//이 이후의 코드만 서버에 넘겨서 추가해주자 그럼 서버 형식으로 알아서 마샬링..하면 될듯?
 	err = bc.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		err := b.Put(newBlock.Hash, newBlock.Serialize())
+		log.Println()
 		if err != nil {
 			log.Panic(err)
 		}

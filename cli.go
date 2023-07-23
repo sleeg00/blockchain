@@ -6,10 +6,16 @@ import (
 	"log"
 
 	"os"
+
+	blockchain "github.com/sleeg00/blockchain/proto"
+	"google.golang.org/grpc"
 )
 
 // CLI responsible for processing command line arguments
-type CLI struct{}
+type CLI struct {
+	nodeID     string
+	blockchain blockchain.BlockchainServiceClient
+}
 
 func (cli *CLI) printUsage() {
 	fmt.Println("Usage:")
@@ -31,11 +37,32 @@ func (cli *CLI) validateArgs() {
 	}
 }
 
+func main() {
+	nodeID := "3000"
+	if nodeID == "" {
+		fmt.Printf("NODE_ID env. var is not set!")
+		os.Exit(1)
+	}
+	serverAddress := fmt.Sprintf("localhost:%s", nodeID)
+
+	conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("Failed to connect to gRPC server: %v", err)
+	}
+	defer conn.Close()
+
+	client := blockchain.NewBlockchainServiceClient(conn)
+	cli := CLI{
+		nodeID:     nodeID,
+		blockchain: client,
+	}
+
+	cli.Run()
+}
+
 // Run parses command line arguments and processes commands
 func (cli *CLI) Run() {
 	cli.validateArgs()
-
-	nodeID := "3003"
 
 	getBalanceCmd := flag.NewFlagSet("getbalance", flag.ExitOnError)
 	createBlockchainCmd := flag.NewFlagSet("createblockchain", flag.ExitOnError)
@@ -119,7 +146,7 @@ func (cli *CLI) Run() {
 			getBalanceCmd.Usage()
 			os.Exit(1)
 		}
-		cli.getBalance(*getBalanceAddress, nodeID)
+		cli.getBalance(*getBalanceAddress, cli.nodeID)
 	}
 
 	if createBlockchainCmd.Parsed() {
@@ -127,23 +154,23 @@ func (cli *CLI) Run() {
 			createBlockchainCmd.Usage()
 			os.Exit(1)
 		}
-		cli.createBlockchain(*createBlockchainAddress, nodeID)
+		cli.createBlockchain(*createBlockchainAddress, cli.nodeID)
 	}
 
 	if createWalletCmd.Parsed() {
-		cli.createWallet(nodeID)
+		cli.createWallet(cli.nodeID)
 	}
 
 	if listAddressesCmd.Parsed() {
-		cli.listAddresses(nodeID)
+		cli.listAddresses(cli.nodeID)
 	}
 
 	if printChainCmd.Parsed() {
-		cli.printChain(nodeID)
+		cli.printChain(cli.nodeID)
 	}
 
 	if reindexUTXOCmd.Parsed() {
-		cli.reindexUTXO(nodeID)
+		cli.reindexUTXO(cli.nodeID)
 	}
 
 	if sendCmd.Parsed() {
@@ -152,14 +179,12 @@ func (cli *CLI) Run() {
 			os.Exit(1)
 		}
 
-		cli.send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
+		cli.send(*sendFrom, *sendTo, *sendAmount, cli.nodeID, *sendMine)
 	}
 
 	if startNodeCmd.Parsed() {
-		if nodeID == "" {
-			startNodeCmd.Usage()
-			os.Exit(1)
-		}
-		cli.startNode(nodeID, *startNodeMiner)
+
+		cli.startNode(cli.nodeID, *startNodeMiner)
 	}
+
 }

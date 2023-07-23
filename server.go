@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
@@ -9,6 +10,10 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+
+	"github.com/boltdb/bolt"
+	blockchain "github.com/sleeg00/blockchain/proto"
+	"google.golang.org/grpc"
 )
 
 const protocol = "tcp"
@@ -17,9 +22,12 @@ const commandLength = 12
 
 var nodeAddress string
 var miningAddress string
-var knownNodes = []string{"localhost:3000"}
+var knownNodes = []string{"localhost:3000", "localhost:3001"}
 var blocksInTransit = [][]byte{}
 var mempool = make(map[string]Transaction)
+
+type server struct {
+}
 
 type addr struct {
 	AddrList []string
@@ -160,8 +168,9 @@ func sendTx(addr string, tnx *Transaction) {
 	sendData(addr, request)
 }
 
+// Version을 보낼 노드, Version을 보낸 노드의 Blockchain
 func sendVersion(addr string, bc *Blockchain) {
-	bestHeight := bc.GetBestHeight()
+	bestHeight := bc.GetBestHeight() //Version을 보낸 노드의 최고 길이는?
 	payload := gobEncode(verzion{nodeVersion, bestHeight, nodeAddress})
 
 	request := append(commandToBytes("version"), payload...)
@@ -169,6 +178,23 @@ func sendVersion(addr string, bc *Blockchain) {
 	sendData(addr, request)
 }
 
+/*
+bc := NewBlockchain(nodeID) //여기서 DB안 닫았음.
+
+	for i := 0; i < len(knownNodes); i++ {
+		if nodeAddress != knownNodes[i] {
+			sendVersion(knownNodes[i], bc)
+		}
+	}
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Panic(err)
+		}
+		go handleConnection(conn, bc)
+	}
+*/
 func handleAddr(request []byte) {
 	var buff bytes.Buffer
 	var payload addr
@@ -371,7 +397,6 @@ func handleVersion(request []byte, bc *Blockchain) {
 	if err != nil {
 		log.Panic(err)
 	}
-	bc = NewBlockchain(payload.AddrFrom[4:])
 
 	myBestHeight := bc.GetBestHeight()
 	foreignerBestHeight := payload.BestHeight
@@ -421,31 +446,6 @@ func handleConnection(conn net.Conn, bc *Blockchain) {
 	conn.Close()
 }
 
-// StartServer starts a node
-func StartServer(nodeID, minerAddress string) {
-	nodeAddress = fmt.Sprintf("localhost:%s", nodeID)
-	miningAddress = minerAddress
-	ln, err := net.Listen(protocol, nodeAddress)
-	if err != nil {
-		log.Panic(err)
-	}
-	defer ln.Close()
-
-	bc := NewBlockchain(nodeID)
-
-	if nodeAddress != knownNodes[0] {
-		sendVersion(knownNodes[0], bc)
-	}
-
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Panic(err)
-		}
-		go handleConnection(conn, bc)
-	}
-}
-
 func gobEncode(data interface{}) []byte {
 	var buff bytes.Buffer
 
@@ -466,4 +466,137 @@ func nodeIsKnown(addr string) bool {
 	}
 
 	return false
+}
+
+func StartServer(nodeID, minerAddress string) {
+	LocalNode := "localhost:" + nodeID
+	srv := grpc.NewServer()
+	lis, err := net.Listen("tcp", fmt.Sprintf(LocalNode))
+
+	if err != nil {
+		log.Fatalf("서버 연결 안됨")
+	}
+	blockchainService := &server{}
+	blockchain.RegisterBlockchainServiceServer(srv, blockchainService)
+
+	log.Println("Server listening on localhost:", nodeID)
+
+	if err := srv.Serve(lis); err != nil {
+		log.Fatalf("Failed to serve: %v", err)
+	}
+
+}
+func (s *server) CreateWallet(ctx context.Context, req *blockchain.CreateWalletRequest) (*blockchain.CreateWalletResponse, error) {
+
+	wallets, _ := NewWallets(req.NodeId)
+
+	address := wallets.CreateWallet()
+
+	wallets.SaveToFile(req.NodeId)
+
+	fmt.Printf("Your new address: %s\n", address)
+	return &blockchain.CreateWalletResponse{
+		Address: address,
+	}, nil
+}
+
+func (s *server) CreateBlockchain(ctx context.Context, req *blockchain.CreateBlockchainRequest) (*blockchain.CreateBlockchainResponse, error) {
+	if !ValidateAddress(req.Address) {
+		log.Panic("ERROR: Address is not valid")
+	}
+	bc := CreateBlockchain(req.Address, req.NodeId)
+
+	UTXOSet := UTXOSet{bc}
+	UTXOSet.Reindex()
+	defer bc.db.Close()
+	return &blockchain.CreateBlockchainResponse{
+		Response: "Success",
+	}, nil
+}
+
+func (s *server) Send(ctx context.Context, req *blockchain.SendRequest) (*blockchain.SendResponse, error) {
+
+	log.Println(req.To + "에게 TX보내는중~")
+
+	block := convertToTransaction(req.Block)
+	// log.Println(block)
+	// log.Println(block.Transactions)
+
+	bc := NewBlockchain(req.NodeTo)
+
+	UTXOSet := UTXOSet{bc}
+
+	defer bc.db.Close()
+	//----
+	log.Println(block.Transactions)
+	UTXOSet.Update(block)
+
+	if req.MineNow {
+
+		err := bc.db.Update(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte(blocksBucket))
+			err := b.Put(block.Hash, block.Serialize())
+			log.Println("블럭해시", block.Hash, "\n직렬화", block.Serialize())
+			if err != nil {
+				log.Panic(err)
+			}
+
+			err = b.Put([]byte("l"), block.Hash)
+			if err != nil {
+				log.Panic(err)
+			}
+
+			bc.tip = block.Hash
+
+			return nil
+		})
+		if err != nil {
+			log.Panic(err)
+		}
+
+		UTXOSet.Update(block)
+	} else {
+		//	sendTx(knownNodes[0], tx)
+	}
+
+	response := &blockchain.SendResponse{
+		Response: "Success",
+	}
+	return response, nil
+}
+func convertToTransaction(pbBlock *blockchain.Block) *Block {
+	var transactions []*Transaction
+	for _, tx := range pbBlock.Transactions {
+		transaction := &Transaction{
+			ID:   tx.Id,
+			Vin:  []TXInput{},
+			Vout: []TXOutput{},
+		}
+		for _, pbVin := range tx.Vin {
+			vin := TXInput{
+				Txid:      pbVin.Txid,
+				Vout:      int(pbVin.Vout),
+				Signature: pbVin.Signature,
+				PubKey:    pbVin.PubKey,
+			}
+			transaction.Vin = append(transaction.Vin, vin)
+		}
+		for _, pbVout := range tx.Vout {
+			vout := TXOutput{
+				Value:      int(pbVout.Value),
+				PubKeyHash: pbVout.PubKeyHash,
+			}
+			transaction.Vout = append(transaction.Vout, vout)
+		}
+		transactions = append(transactions, transaction)
+	}
+
+	return &Block{
+		Timestamp:     pbBlock.Timestamp,
+		Transactions:  transactions,
+		PrevBlockHash: pbBlock.GetPrevBlockHash(),
+		Hash:          pbBlock.Hash,
+		Nonce:         int(pbBlock.Nonce),
+		Height:        int(pbBlock.Height),
+	}
 }
