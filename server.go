@@ -12,6 +12,7 @@ import (
 	"net"
 
 	"github.com/boltdb/bolt"
+	"github.com/sleeg00/blockchain/proto"
 	blockchain "github.com/sleeg00/blockchain/proto"
 	"google.golang.org/grpc"
 )
@@ -22,7 +23,7 @@ const commandLength = 12
 
 var nodeAddress string
 var miningAddress string
-var knownNodes = []string{"localhost:3000", "localhost:3001"}
+var knownNodes = []string{"localhost:3000", "localhost:3001", "localhost:3002"}
 var blocksInTransit = [][]byte{}
 var mempool = make(map[string]Transaction)
 
@@ -514,29 +515,31 @@ func (s *server) CreateBlockchain(ctx context.Context, req *blockchain.CreateBlo
 	}, nil
 }
 
-func (s *server) Send(ctx context.Context, req *blockchain.SendRequest) (*blockchain.SendResponse, error) {
+func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendResponse, error) {
 
-	log.Println(req.To + "에게 TX보내는중~")
-
-	block := convertToTransaction(req.Block)
-	// log.Println(block)
-	// log.Println(block.Transactions)
+	Tx := convertToTransaction(req.Block)
 
 	bc := NewBlockchain(req.NodeTo)
-
+	defer bc.db.Close()
 	UTXOSet := UTXOSet{bc}
 
-	defer bc.db.Close()
-	//----
-	log.Println(block.Transactions)
-	UTXOSet.Update(block)
+	block := Block{
+		Timestamp:     req.Block.Timestamp,
+		PrevBlockHash: req.Block.PrevBlockHash,
+		Transactions:  Tx,
+		Hash:          req.Block.Hash,
+		Nonce:         int(req.Block.Nonce),
+		Height:        int(req.Block.Height),
+	}
 
 	if req.MineNow {
 
 		err := bc.db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(blocksBucket))
-			err := b.Put(block.Hash, block.Serialize())
-			log.Println("블럭해시", block.Hash, "\n직렬화", block.Serialize())
+			a1 := block.Hash
+			b1 := block.Serialize()
+			err := b.Put(a1, b1)
+
 			if err != nil {
 				log.Panic(err)
 			}
@@ -555,16 +558,72 @@ func (s *server) Send(ctx context.Context, req *blockchain.SendRequest) (*blockc
 		}
 
 		UTXOSet.Update(block)
+
 	} else {
-		//	sendTx(knownNodes[0], tx)
+		//sendTx(knownNodes[0], tx)
+		//mempool[hex.EncodeToString(Tx.ID)] = Tx
 	}
 
-	response := &blockchain.SendResponse{
+	response := &proto.SendResponse{
 		Response: "Success",
 	}
 	return response, nil
 }
-func convertToTransaction(pbBlock *blockchain.Block) *Block {
+func (s *server) SendTransaction(ctx context.Context, req *proto.SendTransactionRequest) (*proto.ResponseTransaction, error) {
+	tx := convertToOneTransaction(req.Transaction)
+	mempool[hex.EncodeToString(req.Transaction.Id)] = tx
+
+	if len(mempool) >= 2 && len(miningAddress) > 0 {
+		bc := NewBlockchain(req.NodeTo)
+		defer bc.db.Close()
+	MineTransactions:
+		var txs []*Transaction
+
+		for id := range mempool {
+			tx := mempool[id]
+			if bc.VerifyTransaction(&tx) {
+				txs = append(txs, &tx)
+			}
+		}
+
+		if len(txs) == 0 {
+			fmt.Println("All transactions are invalid! Waiting for new ones...")
+			return nil, nil
+		}
+
+		cbTx := NewCoinbaseTX(miningAddress, "")
+		txs = append(txs, cbTx)
+
+		newBlock := bc.MineBlock(txs)
+		UTXOSet := UTXOSet{bc}
+		UTXOSet.Reindex()
+
+		for _, tx := range txs {
+			txID := hex.EncodeToString(tx.ID)
+			delete(mempool, txID)
+		}
+
+		for _, node := range knownNodes {
+			if node != nodeAddress {
+				sendInv(node, "block", [][]byte{newBlock.Hash})
+			}
+		}
+
+		if len(mempool) > 0 {
+			goto MineTransactions
+		}
+		responseTxs := convertToProtoTransactions(newBlock.Transactions)
+		return &proto.ResponseTransaction{
+			Timestamp:     newBlock.Timestamp,
+			PrevBlockHash: newBlock.PrevBlockHash,
+			Transactions:  txs,
+			Hash:          newBlock.Hash,
+			Nonce:         int(newBlock.Nonce),
+			Height:        int(newBlock.Height),
+		}, nil
+	}
+}
+func convertToTransaction(pbBlock *proto.Block) []*Transaction {
 	var transactions []*Transaction
 	for _, tx := range pbBlock.Transactions {
 		transaction := &Transaction{
@@ -590,13 +649,62 @@ func convertToTransaction(pbBlock *blockchain.Block) *Block {
 		}
 		transactions = append(transactions, transaction)
 	}
+	return transactions
+}
 
-	return &Block{
-		Timestamp:     pbBlock.Timestamp,
-		Transactions:  transactions,
-		PrevBlockHash: pbBlock.GetPrevBlockHash(),
-		Hash:          pbBlock.Hash,
-		Nonce:         int(pbBlock.Nonce),
-		Height:        int(pbBlock.Height),
+func convertToOneTransaction(tx *proto.Transaction) Transaction {
+	var transactions Transaction
+
+	transaction := &Transaction{
+		ID:   tx.Id,
+		Vin:  []TXInput{},
+		Vout: []TXOutput{},
 	}
+	for _, pbVin := range tx.Vin {
+		vin := TXInput{
+			Txid:      pbVin.Txid,
+			Vout:      int(pbVin.Vout),
+			Signature: pbVin.Signature,
+			PubKey:    pbVin.PubKey,
+		}
+		transaction.Vin = append(transaction.Vin, vin)
+	}
+	for _, pbVout := range tx.Vout {
+		vout := TXOutput{
+			Value:      int(pbVout.Value),
+			PubKeyHash: pbVout.PubKeyHash,
+		}
+		transaction.Vout = append(transaction.Vout, vout)
+	}
+	transactions = *transaction
+
+	return transactions
+}
+
+func convertToProtoTransactions(tx []*Transaction) *proto.Transaction {
+	protoTx := &proto.Transaction{
+		Id:   tx.Id,
+		Vin:  []*proto.TXInput{},
+		Vout: []*proto.TXOutput{},
+	}
+
+	for _, vin := range tx.Vin {
+		protoVin := &proto.TXInput{
+			Txid:      vin.Txid,
+			Vout:      int64(vin.Vout),
+			Signature: vin.Signature,
+			PubKey:    vin.PubKey,
+		}
+		protoTx.Vin = append(protoTx.Vin, protoVin)
+	}
+
+	for _, vout := range tx.Vout {
+		protoVout := &proto.TXOutput{
+			Value:      int64(vout.Value),
+			PubKeyHash: vout.PubKeyHash,
+		}
+		protoTx.Vout = append(protoTx.Vout, protoVout)
+	}
+
+	return protoTx
 }

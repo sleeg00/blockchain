@@ -140,14 +140,16 @@ func (u UTXOSet) Reindex() {
 
 // Update updates the UTXO set with transactions from the Block
 // The Block is considered to be the tip of a blockchain
-func (u UTXOSet) Update(block *Block) {
-	db := u.Blockchain.db
+func (u UTXOSet) Update(block Block) {
 
+	db := u.Blockchain.db
+	defer db.Close()
 	err := db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(utxoBucket))
 
 		for _, tx := range block.Transactions {
 			if !tx.IsCoinbase() {
+
 				for _, vin := range tx.Vin {
 					updatedOuts := TXOutputs{}
 					outsBytes := b.Get(vin.Txid)
@@ -187,6 +189,7 @@ func (u UTXOSet) Update(block *Block) {
 			if err != nil {
 				log.Panic(err)
 			}
+
 		}
 
 		return nil

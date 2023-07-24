@@ -29,6 +29,18 @@ func NewBlock(transactions []*Transaction, prevBlockHash []byte, height int) *Bl
 	return block
 }
 
+// NewBlock creates and returns Block
+func NewBlockNotAddress(transactions []*Transaction, prevBlockHash []byte, height int) Block {
+	block := Block{time.Now().Unix(), transactions, prevBlockHash, []byte{}, 0, height}
+	pow := NewProofOfWork(&block)
+	nonce, hash := pow.Run()
+
+	block.Hash = hash[:]
+	block.Nonce = nonce
+
+	return block
+}
+
 // NewGenesisBlock creates and returns genesis Block
 func NewGenesisBlock(coinbase *Transaction) *Block {
 	return NewBlock([]*Transaction{coinbase}, []byte{}, 0)
