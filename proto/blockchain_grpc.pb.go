@@ -26,6 +26,8 @@ type BlockchainServiceClient interface {
 	CreateWallet(ctx context.Context, in *CreateWalletRequest, opts ...grpc.CallOption) (*CreateWalletResponse, error)
 	CreateBlockchain(ctx context.Context, in *CreateBlockchainRequest, opts ...grpc.CallOption) (*CreateBlockchainResponse, error)
 	SendTransaction(ctx context.Context, in *SendTransactionRequest, opts ...grpc.CallOption) (*ResponseTransaction, error)
+	Mining(ctx context.Context, in *MiningRequest, opts ...grpc.CallOption) (*MiningResponse, error)
+	SendBlock(ctx context.Context, in *SendBlockRequest, opts ...grpc.CallOption) (*SendBlockResponse, error)
 }
 
 type blockchainServiceClient struct {
@@ -72,6 +74,24 @@ func (c *blockchainServiceClient) SendTransaction(ctx context.Context, in *SendT
 	return out, nil
 }
 
+func (c *blockchainServiceClient) Mining(ctx context.Context, in *MiningRequest, opts ...grpc.CallOption) (*MiningResponse, error) {
+	out := new(MiningResponse)
+	err := c.cc.Invoke(ctx, "/blockchain.BlockchainService/Mining", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *blockchainServiceClient) SendBlock(ctx context.Context, in *SendBlockRequest, opts ...grpc.CallOption) (*SendBlockResponse, error) {
+	out := new(SendBlockResponse)
+	err := c.cc.Invoke(ctx, "/blockchain.BlockchainService/SendBlock", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BlockchainServiceServer is the server API for BlockchainService service.
 // All implementations must embed UnimplementedBlockchainServiceServer
 // for forward compatibility
@@ -80,7 +100,9 @@ type BlockchainServiceServer interface {
 	CreateWallet(context.Context, *CreateWalletRequest) (*CreateWalletResponse, error)
 	CreateBlockchain(context.Context, *CreateBlockchainRequest) (*CreateBlockchainResponse, error)
 	SendTransaction(context.Context, *SendTransactionRequest) (*ResponseTransaction, error)
-	mustEmbedUnimplementedBlockchainServiceServer()
+	Mining(context.Context, *MiningRequest) (*MiningResponse, error)
+	SendBlock(context.Context, *SendBlockRequest) (*SendBlockResponse, error)
+	// mustEmbedUnimplementedBlockchainServiceServer()
 }
 
 // UnimplementedBlockchainServiceServer must be embedded to have forward compatible implementations.
@@ -98,6 +120,12 @@ func (UnimplementedBlockchainServiceServer) CreateBlockchain(context.Context, *C
 }
 func (UnimplementedBlockchainServiceServer) SendTransaction(context.Context, *SendTransactionRequest) (*ResponseTransaction, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendTransaction not implemented")
+}
+func (UnimplementedBlockchainServiceServer) Mining(context.Context, *MiningRequest) (*MiningResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Mining not implemented")
+}
+func (UnimplementedBlockchainServiceServer) SendBlock(context.Context, *SendBlockRequest) (*SendBlockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendBlock not implemented")
 }
 func (UnimplementedBlockchainServiceServer) mustEmbedUnimplementedBlockchainServiceServer() {}
 
@@ -184,6 +212,42 @@ func _BlockchainService_SendTransaction_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BlockchainService_Mining_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MiningRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlockchainServiceServer).Mining(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/blockchain.BlockchainService/Mining",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlockchainServiceServer).Mining(ctx, req.(*MiningRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BlockchainService_SendBlock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendBlockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlockchainServiceServer).SendBlock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/blockchain.BlockchainService/SendBlock",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlockchainServiceServer).SendBlock(ctx, req.(*SendBlockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BlockchainService_ServiceDesc is the grpc.ServiceDesc for BlockchainService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -206,6 +270,14 @@ var BlockchainService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendTransaction",
 			Handler:    _BlockchainService_SendTransaction_Handler,
+		},
+		{
+			MethodName: "Mining",
+			Handler:    _BlockchainService_Mining_Handler,
+		},
+		{
+			MethodName: "SendBlock",
+			Handler:    _BlockchainService_SendBlock_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

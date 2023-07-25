@@ -185,6 +185,7 @@ func NewCoinbaseTX(to, data string) *Transaction {
 	}
 
 	txin := TXInput{[]byte{}, -1, nil, []byte(data)}
+	log.Println("mineAddress?: " + to)
 	txout := NewTXOutput(subsidy, to)
 	tx := Transaction{nil, []TXInput{txin}, []TXOutput{*txout}}
 	tx.ID = tx.Hash()

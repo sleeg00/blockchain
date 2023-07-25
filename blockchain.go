@@ -351,13 +351,14 @@ func (bc *Blockchain) MineBlock(transactions []*Transaction) *Block {
 	return newBlock
 }
 
-// SignTransaction signs inputs of a Transaction
+// 트랜잭션 사인
 func (bc *Blockchain) SignTransaction(tx *Transaction, privKey ecdsa.PrivateKey) {
 	prevTXs := make(map[string]Transaction)
 
 	for _, vin := range tx.Vin {
 		prevTX, err := bc.FindTransaction(vin.Txid)
 		if err != nil {
+
 			log.Panic(err)
 		}
 		prevTXs[hex.EncodeToString(prevTX.ID)] = prevTX
@@ -366,7 +367,7 @@ func (bc *Blockchain) SignTransaction(tx *Transaction, privKey ecdsa.PrivateKey)
 	tx.Sign(privKey, prevTXs)
 }
 
-// VerifyTransaction verifies transaction input signatures
+// 이전 트랜잭션 유효한지 검사
 func (bc *Blockchain) VerifyTransaction(tx *Transaction) bool {
 	if tx.IsCoinbase() {
 		return true

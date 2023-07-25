@@ -275,7 +275,11 @@ func (cli *CLI) Run() {
 			wg.Wait()
 
 		} else {
+
+			//-----모든 노드 mempool에 TX를 저장시킨다.
 			tx := sendTrsaction(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
+
+			log.Println("보내는 해시 가 어떤지", tx)
 			var wg sync.WaitGroup //고루틴이 완료되기를 기다리기 위한 준비를 합니다.
 			for i := 0; i < len(knownNodes); i++ {
 				wg.Add(1) // 고루틴의 수를 증가시킵니다.
@@ -305,7 +309,7 @@ func (cli *CLI) Run() {
 
 			}
 			wg.Wait()
-
+			//-----모든 노드 mempool에 TX를 저장시킨다.
 		}
 	}
 	if startNodeCmd.Parsed() {
@@ -328,4 +332,36 @@ func (cli *CLI) Run() {
 		}
 		cli.startNode(cli.nodeID, *startNodeMiner)
 	}
+}
+
+func convertFromProtoTransaction(ptx *blockchain.Transaction) *Transaction {
+	return &Transaction{
+		ID:   ptx.Id,
+		Vin:  convertFromProtoInputs(ptx.Vin),
+		Vout: convertFromProtoOutputs(ptx.Vout),
+	}
+}
+
+func convertFromProtoInputs(protoInputs []*blockchain.TXInput) []TXInput {
+	var inputs []TXInput
+	for _, input := range protoInputs {
+		inputs = append(inputs, TXInput{
+			Txid:      input.Txid,
+			Vout:      int(input.Vout),
+			Signature: input.Signature,
+			PubKey:    input.PubKey,
+		})
+	}
+	return inputs
+}
+
+func convertFromProtoOutputs(protoOutputs []*blockchain.TXOutput) []TXOutput {
+	var outputs []TXOutput
+	for _, output := range protoOutputs {
+		outputs = append(outputs, TXOutput{
+			Value:      int(output.Value),
+			PubKeyHash: output.PubKeyHash,
+		})
+	}
+	return outputs
 }

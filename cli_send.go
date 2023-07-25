@@ -60,6 +60,7 @@ func (cli *CLI) requestTransaction(from, to string, amount int, node_id string, 
 	log.Printf("Received response from node %s: %v", node_id, response1)
 
 }
+
 func send(from, to string, amount int, node_id string, mineNow bool) Block {
 
 	bc := NewBlockchainRead(node_id)
@@ -118,7 +119,7 @@ func send(from, to string, amount int, node_id string, mineNow bool) Block {
 
 func sendTrsaction(from, to string, amount int, node_id string, mineNow bool) *proto.Transaction {
 	bc := NewBlockchainRead(node_id)
-
+	defer bc.db.Close()
 	UTXOSet := UTXOSet{bc}
 
 	wallets, err := NewWallets(node_id) //wallet.node_id 확인
@@ -167,5 +168,43 @@ func sendTrsaction(from, to string, amount int, node_id string, mineNow bool) *p
 		protoTransactions = protoTx
 
 	}
+
 	return protoTransactions
 }
+
+/*
+func (cli *CLI) send(from, to string, amount int, nodeID string, mineNow bool) {
+
+	if !ValidateAddress(from) {
+		log.Panic("ERROR: Sender address is not valid")
+	}
+	if !ValidateAddress(to) {
+		log.Panic("ERROR: Recipient address is not valid")
+	}
+
+	bc := NewBlockchain(nodeID)
+
+	UTXOSet := UTXOSet{bc}
+	defer bc.db.Close()
+
+	wallets, err := NewWallets(nodeID)
+	if err != nil {
+		log.Panic(err)
+	}
+	wallet := wallets.GetWallet(from)
+
+	tx := NewUTXOTransaction(&wallet, to, amount, &UTXOSet)
+
+	if mineNow {
+		cbTx := NewCoinbaseTX(from, "") //마이닝했기 때문에 새로운 TX가 발생한다
+		txs := []*Transaction{cbTx, tx} //두개의 TX들이 들어있는 []이다
+
+		newBlock := bc.MineBlock(txs) //두개의 TX가 들어있는 블럭을 마이닝한다
+		UTXOSet.Update(newBlock)
+	} else {
+		sendTx(knownNodes[0], tx)
+	}
+
+	fmt.Println("Success!")
+}
+*/

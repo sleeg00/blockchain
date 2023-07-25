@@ -14,8 +14,11 @@ type TXOutput struct {
 
 // Lock signs the output
 func (out *TXOutput) Lock(address []byte) {
+	log.Println("엥? : ", address)
 	pubKeyHash := Base58Decode(address)
+	log.Println("pubkeyHash: ", pubKeyHash)
 	pubKeyHash = pubKeyHash[1 : len(pubKeyHash)-4]
+	log.Println("pubkeyHash2: ", pubKeyHash)
 	out.PubKeyHash = pubKeyHash
 }
 

@@ -98,6 +98,24 @@ message ResponseTransaction {
   
 }
 
+
+message MiningRequest {
+  string node_to = 1;
+}
+
+message MiningResponse {
+  string response = 1;
+  repeated Transaction transactions = 2;
+}
+
+message SendBlockRequest {
+  Block block =1;
+  string node_id = 2;
+}
+
+message SendBlockResponse {
+  string response = 1;
+}
 service BlockchainService {
 
  rpc Send(SendRequest) returns (SendResponse) {}
@@ -110,4 +128,7 @@ service BlockchainService {
 
   rpc SendTransaction(SendTransactionRequest) returns (ResponseTransaction){}
 
+  rpc Mining(MiningRequest) returns (MiningResponse) {}
+
+  rpc SendBlock(SendBlockRequest) returns (SendBlockResponse) {}
 }
