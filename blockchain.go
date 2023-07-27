@@ -71,7 +71,6 @@ func CreateBlockchain(address, nodeID string) *Blockchain {
 // 블럭체인의 마지막 Hash값과 블록체인의 주소를 가져옴
 func NewBlockchain(nodeID string) *Blockchain {
 
-	log.Println("NewBlcokchain :" + nodeID)
 	dbFile := fmt.Sprintf(dbFile, nodeID)
 
 	if !dbExists(dbFile) {

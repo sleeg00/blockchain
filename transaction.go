@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"math/big"
 	"strings"
+	"time"
 
 	"encoding/gob"
 	"encoding/hex"
@@ -49,7 +50,8 @@ func (tx *Transaction) Hash() []byte {
 	txCopy := *tx
 	txCopy.ID = []byte{}
 
-	hash = sha256.Sum256(txCopy.Serialize())
+	data := bytes.Join([][]byte{txCopy.Serialize(), []byte(time.Now().String())}, []byte{})
+	hash = sha256.Sum256(data)
 
 	return hash[:]
 }

@@ -4,7 +4,7 @@ import "fmt"
 
 func (cli *CLI) reindexUTXO(nodeID string) {
 	bc := NewBlockchain(nodeID)
-	UTXOSet := UTXOSet{bc}
+	UTXOSet := UTXOSet{Blockchain: bc}
 	UTXOSet.Reindex()
 
 	count := UTXOSet.CountTransactions()

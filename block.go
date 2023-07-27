@@ -19,7 +19,14 @@ type Block struct {
 
 // NewBlock creates and returns Block
 func NewBlock(transactions []*Transaction, prevBlockHash []byte, height int) *Block {
-	block := &Block{time.Now().Unix(), transactions, prevBlockHash, []byte{}, 0, height}
+	block := &Block{
+		Timestamp:     time.Now().Unix(),
+		Transactions:  transactions,
+		PrevBlockHash: prevBlockHash,
+		Hash:          []byte{},
+		Nonce:         0,
+		Height:        height,
+	}
 	pow := NewProofOfWork(block)
 	nonce, hash := pow.Run()
 
@@ -31,14 +38,21 @@ func NewBlock(transactions []*Transaction, prevBlockHash []byte, height int) *Bl
 
 // NewBlock creates and returns Block
 func NewBlockNotAddress(transactions []*Transaction, prevBlockHash []byte, height int) Block {
-	block := Block{time.Now().Unix(), transactions, prevBlockHash, []byte{}, 0, height}
-	pow := NewProofOfWork(&block)
+	block := &Block{
+		Timestamp:     time.Now().Unix(),
+		Transactions:  transactions,
+		PrevBlockHash: prevBlockHash,
+		Hash:          []byte{},
+		Nonce:         0,
+		Height:        height,
+	}
+	pow := NewProofOfWork(block)
 	nonce, hash := pow.Run()
 
 	block.Hash = hash[:]
 	block.Nonce = nonce
 
-	return block
+	return *block
 }
 
 // NewGenesisBlock creates and returns genesis Block

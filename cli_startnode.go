@@ -69,10 +69,12 @@ func (cli *CLI) startNode(nodeID, minerAddress string) {
 			var txs []*Transaction
 
 			for id := range mempool {
+
 				tx := mempool[id]
 				if bc.VerifyTransaction(&tx) {
 					txs = append(txs, &tx)
 				}
+				log.Println(tx)
 			}
 			log.Println("내가 모은 mempool에 TX찍어보기", txs)
 			if len(txs) == 0 {
@@ -103,10 +105,10 @@ func (cli *CLI) startNode(nodeID, minerAddress string) {
 
 			wg.Add(1)
 
-			var newBlock Block
+			var newBlock *Block
 			// 블록 생성 작업을 고루틴으로 실행
 			go func() {
-				newBlock = NewBlockNotAddress(txs, lastHash, lastHeight+1)
+				newBlock = NewBlock(txs, lastHash, lastHeight+1)
 				wg.Done() // 작업이 끝날 때 Done()을 호출하여 종료를 알림
 			}()
 
@@ -191,6 +193,11 @@ func (cli *CLI) startNode(nodeID, minerAddress string) {
 			}
 			wg.Wait()
 
+			//for id := range mempool {
+			//tx := mempool[id]
+			//delete(mempool, tx.String())
+
+			//}
 			log.Println("모든 노드에게 블럭을 전달을 끝냈다.")
 		} else {
 			log.Panic("Wrong miner address!")
@@ -199,7 +206,7 @@ func (cli *CLI) startNode(nodeID, minerAddress string) {
 		StartServer(nodeID, minerAddress)
 	}
 }
-func makeClientTransaction(newBlock Block) []*proto.Transaction {
+func makeClientTransaction(newBlock *Block) []*proto.Transaction {
 	var protoTransactions []*proto.Transaction
 
 	for _, tx := range newBlock.Transactions {

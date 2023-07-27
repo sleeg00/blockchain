@@ -142,14 +142,16 @@ func (u UTXOSet) Reindex() {
 // The Block is considered to be the tip of a blockchain
 func (u UTXOSet) Update(block Block) {
 
+	log.Println("\n\n블럭이전해시  : ", block.PrevBlockHash)
+
 	db := u.Blockchain.db
 	defer db.Close()
 	err := db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(utxoBucket))
-
+		log.Println("\n\n블럭이전해시1  : ", block.PrevBlockHash)
 		for _, tx := range block.Transactions {
 			if !tx.IsCoinbase() {
-
+				log.Println("\n\n블럭이전해시 2 : ", block.PrevBlockHash)
 				for _, vin := range tx.Vin {
 					updatedOuts := TXOutputs{}
 					outsBytes := b.Get(vin.Txid)
@@ -157,39 +159,101 @@ func (u UTXOSet) Update(block Block) {
 						// outsBytes가 비어있는 경우 처리 로직 추가
 						continue
 					}
+					log.Println("\n\n블럭이전해시3  : ", block.PrevBlockHash)
 					outs := DeserializeOutputs(outsBytes)
-
+					log.Println("\n\n블럭이전해시4  : ", block.PrevBlockHash)
 					for outIdx, out := range outs.Outputs {
 						if outIdx != vin.Vout {
 							updatedOuts.Outputs = append(updatedOuts.Outputs, out)
 						}
 					}
-
+					log.Println("\n\n블럭이전해시5  : ", block.PrevBlockHash)
 					if len(updatedOuts.Outputs) == 0 {
 						err := b.Delete(vin.Txid)
 						if err != nil {
 							log.Panic(err)
 						}
+						log.Println("\n\n블럭이전해시6  : ", block.PrevBlockHash)
 					} else {
 						err := b.Put(vin.Txid, updatedOuts.Serialize())
 						if err != nil {
 							log.Panic(err)
 						}
+						log.Println("\n\n블럭이전해시 7 : ", block.PrevBlockHash)
 					}
 
 				}
 			}
+			log.Println("\n\n블럭이전해시8  : ", block.PrevBlockHash)
 
 			newOutputs := TXOutputs{}
 			for _, out := range tx.Vout {
 				newOutputs.Outputs = append(newOutputs.Outputs, out)
 			}
 
+			log.Println("\n\n블럭이전해시9  : ", block.PrevBlockHash)
 			err := b.Put(tx.ID, newOutputs.Serialize())
 			if err != nil {
 				log.Panic(err)
 			}
+			log.Println("\n\n블럭이전해시 10 : ", block.PrevBlockHash)
+		}
 
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Println("\n\n블럭이전해시 11 : ", block.PrevBlockHash)
+}
+
+func (u UTXOSet) UpdateTx(txo *Transaction) {
+
+	db := u.Blockchain.db
+	defer db.Close()
+	err := db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(utxoBucket))
+
+		if !txo.IsCoinbase() {
+
+			for _, vin := range txo.Vin {
+				updatedOuts := TXOutputs{}
+				outsBytes := b.Get(vin.Txid)
+				if len(outsBytes) == 0 {
+					// outsBytes가 비어있는 경우 처리 로직 추가
+					continue
+				}
+				outs := DeserializeOutputs(outsBytes)
+
+				for outIdx, out := range outs.Outputs {
+					if outIdx != vin.Vout {
+						updatedOuts.Outputs = append(updatedOuts.Outputs, out)
+					}
+				}
+
+				if len(updatedOuts.Outputs) == 0 {
+					err := b.Delete(vin.Txid)
+					if err != nil {
+						log.Panic(err)
+					}
+				} else {
+					err := b.Put(vin.Txid, updatedOuts.Serialize())
+					if err != nil {
+						log.Panic(err)
+					}
+				}
+
+			}
+
+			newOutputs := TXOutputs{}
+			for _, out := range txo.Vout {
+				newOutputs.Outputs = append(newOutputs.Outputs, out)
+			}
+
+			err := b.Put(txo.ID, newOutputs.Serialize())
+			if err != nil {
+				log.Panic(err)
+			}
 		}
 
 		return nil

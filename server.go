@@ -10,12 +10,15 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"sync"
 
 	"github.com/boltdb/bolt"
 	"github.com/sleeg00/blockchain/proto"
 	blockchain "github.com/sleeg00/blockchain/proto"
 	"google.golang.org/grpc"
 )
+
+var mutex sync.Mutex
 
 const protocol = "tcp"
 const nodeVersion = 1
@@ -238,7 +241,7 @@ func handleBlock(request []byte, bc *Blockchain) {
 
 		blocksInTransit = blocksInTransit[1:]
 	} else {
-		UTXOSet := UTXOSet{bc}
+		UTXOSet := UTXOSet{Blockchain: bc}
 		UTXOSet.Reindex()
 	}
 }
@@ -366,7 +369,7 @@ func handleTx(request []byte, bc *Blockchain) {
 			txs = append(txs, cbTx)
 
 			newBlock := bc.MineBlock(txs)
-			UTXOSet := UTXOSet{bc}
+			UTXOSet := UTXOSet{Blockchain: bc}
 			UTXOSet.Reindex()
 
 			fmt.Println("New block is mined!")
@@ -508,7 +511,7 @@ func (s *server) CreateBlockchain(ctx context.Context, req *blockchain.CreateBlo
 	}
 	bc := CreateBlockchain(req.Address, req.NodeId)
 
-	UTXOSet := UTXOSet{bc}
+	UTXOSet := UTXOSet{Blockchain: bc}
 	UTXOSet.Reindex()
 	defer bc.db.Close()
 	return &blockchain.CreateBlockchainResponse{
@@ -522,7 +525,8 @@ func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendR
 
 	bc := NewBlockchain(req.NodeTo)
 	defer bc.db.Close()
-	UTXOSet := UTXOSet{bc}
+	mutex.Lock()
+	UTXOSet := UTXOSet{Blockchain: bc}
 
 	block := Block{
 		Timestamp:     req.Block.Timestamp,
@@ -561,6 +565,8 @@ func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendR
 	response := &proto.SendResponse{
 		Response: "Success",
 	}
+
+	mutex.Unlock()
 	return response, nil
 }
 
@@ -570,6 +576,7 @@ func (s *server) Mining(ctx context.Context, req *proto.MiningRequest) (*proto.M
 	for _, key := range keys {
 		transaction := mempool[key]
 		tx = append(tx, transaction)
+		delete(mempool, key)
 	}
 
 	changeTx := convertToProtoTransactions(tx)
@@ -580,11 +587,12 @@ func (s *server) Mining(ctx context.Context, req *proto.MiningRequest) (*proto.M
 	}
 	return response, nil
 }
+
 func (s *server) SendTransaction(ctx context.Context, req *proto.SendTransactionRequest) (*proto.ResponseTransaction, error) {
 
 	tx := convertToOneTransaction(req.Transaction)
 	mempool[hex.EncodeToString(req.Transaction.Id)] = tx
-	log.Println("현재 mempool에 TX 받는중")
+	log.Println("노드 아이디 : ", req.NodeTo, " mempool에 TX 받는중")
 	log.Println("Transaction ID : ", req.Transaction.Id, "\n hex: ", hex.EncodeToString(req.Transaction.Id))
 	for key := range mempool {
 		keys = append(keys, key)
@@ -595,7 +603,7 @@ func (s *server) SendTransaction(ctx context.Context, req *proto.SendTransaction
 func (s *server) SendBlock(ctx context.Context, req *proto.SendBlockRequest) (*proto.SendBlockResponse, error) {
 	log.Println("블럭을 잘 전달받았음 ")
 	bc := NewBlockchain(req.NodeId)
-	UTXOSet := UTXOSet{bc}
+	UTXOSet := UTXOSet{Blockchain: bc}
 	defer bc.db.Close()
 	Tx := convertToTransaction(req.Block)
 

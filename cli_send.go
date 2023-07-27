@@ -9,6 +9,11 @@ import (
 	"github.com/sleeg00/blockchain/proto"
 )
 
+type SafeBlock struct {
+	block *proto.Block
+	mutex sync.Mutex
+}
+
 func (cli *CLI) request(from, to string, amount int, node_id string, mineNow bool, block *proto.Block, node_from string) {
 
 	log.Println("이전블럭해시", block.PrevBlockHash)
@@ -23,16 +28,19 @@ func (cli *CLI) request(from, to string, amount int, node_id string, mineNow boo
 		MineNow:  mineNow,
 		Block:    block,
 	}
+	log.Println("이전 해쉬-2 : ", block.PrevBlockHash)
 
 	// 서버에 요청 보내기
 	response1, err1 := cli.blockchain.Send(context.Background(), request)
 	if err1 != nil {
-		log.Panic("Error sending request to node %s: %v", node_id, err1)
+		log.Println("Error sending request to node %s: %v", node_id, err1)
 
 	}
 
+	log.Println("이전 해쉬-3 : ", block.PrevBlockHash)
 	// 서버 응답 처리...
 	log.Printf("Received response from node %s: %v", node_id, response1)
+	log.Println("이전 해쉬-4 : ", block.PrevBlockHash)
 
 }
 
@@ -61,21 +69,20 @@ func (cli *CLI) requestTransaction(from, to string, amount int, node_id string, 
 
 }
 
-func send(from, to string, amount int, node_id string, mineNow bool) Block {
-
+func send(from, to string, amount int, node_id string, mineNow bool) *Block {
 	bc := NewBlockchainRead(node_id)
 
-	UTXOSet := UTXOSet{bc}
+	UTXOSet := UTXOSet{Blockchain: bc}
 
-	wallets, err := NewWallets(node_id) //wallet.node_id 확인
+	wallets, err := NewWallets(node_id) // wallet.node_id 확인
 	if err != nil {
 		log.Panic(err)
 	}
 	wallet := wallets.GetWallet(from)
 
-	tx := NewUTXOTransaction(&wallet, to, amount, &UTXOSet) //돈이 있는지 검사
+	tx := NewUTXOTransaction(&wallet, to, amount, &UTXOSet) // 돈이 있는지 검사
 
-	cbTx := NewCoinbaseTX(from, "") //마이닝했기 때문에 새로운 TX가 발생한다
+	cbTx := NewCoinbaseTX(from, "") // 마이닝했기 때문에 새로운 TX가 발생한다
 	txs := []*Transaction{cbTx, tx}
 
 	var lastHash []byte
@@ -93,6 +100,7 @@ func send(from, to string, amount int, node_id string, mineNow bool) Block {
 		lastHash = b.Get([]byte("l"))
 
 		blockData := b.Get(lastHash)
+
 		block := DeserializeBlock(blockData)
 
 		lastHeight = block.Height
@@ -103,24 +111,15 @@ func send(from, to string, amount int, node_id string, mineNow bool) Block {
 		log.Panic(err)
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	var newBlock Block
-	// 블록 생성 작업을 고루틴으로 실행
-	go func() {
-		newBlock = NewBlockNotAddress(txs, lastHash, lastHeight+1)
-		wg.Done() // 작업이 끝날 때 Done()을 호출하여 종료를 알림
-	}()
-	wg.Wait() // 블록 생성 완료를 기다림
+	newBlock := NewBlock(txs, lastHash, lastHeight+1)
 
 	return newBlock
 }
 
-func sendTrsaction(from, to string, amount int, node_id string, mineNow bool) *proto.Transaction {
-	bc := NewBlockchainRead(node_id)
+func sendTrsaction(from, to string, amount int, node_id string, mineNow bool) *Transaction {
+	bc := NewBlockchain(node_id)
 	defer bc.db.Close()
-	UTXOSet := UTXOSet{bc}
+	UTXOSet := UTXOSet{Blockchain: bc}
 
 	wallets, err := NewWallets(node_id) //wallet.node_id 확인
 	if err != nil {
@@ -130,46 +129,12 @@ func sendTrsaction(from, to string, amount int, node_id string, mineNow bool) *p
 
 	tx := NewUTXOTransaction(&wallet, to, amount, &UTXOSet) //돈이 있는지 검사
 
-	cbTx := NewCoinbaseTX(from, "") //마이닝했기 때문에 새로운 TX가 발생한다
-	txs := []*Transaction{cbTx, tx}
-
-	for _, tx := range txs {
-		// TODO: ignore transaction if it's not valid
-		if !bc.VerifyTransaction(tx) {
-			log.Panic("ERROR: Invalid transaction")
-		}
+	// TODO: ignore transaction if it's not valid
+	if !bc.VerifyTransaction(tx) {
+		log.Panic("ERROR: Invalid transaction")
 	}
-	var protoTransactions *proto.Transaction
-
-	for _, tx := range txs {
-
-		// 각 *Transaction을 proto.Transaction으로 매핑해서 protoTransactions 슬라이스에 추가합니다.
-		protoTx := &proto.Transaction{
-			Id:   tx.ID,
-			Vin:  []*proto.TXInput{},
-			Vout: []*proto.TXOutput{},
-		}
-		for _, vin := range tx.Vin {
-			pbVin := &proto.TXInput{
-				Txid:      vin.Txid,
-				Vout:      int64(vin.Vout),
-				Signature: vin.Signature,
-				PubKey:    vin.PubKey,
-			}
-			protoTx.Vin = append(protoTx.Vin, pbVin)
-		}
-		for _, vout := range tx.Vout {
-			pbVout := &proto.TXOutput{
-				Value:      int64(vout.Value),
-				PubKeyHash: vout.PubKeyHash,
-			}
-			protoTx.Vout = append(protoTx.Vout, pbVout)
-		}
-		protoTransactions = protoTx
-
-	}
-
-	return protoTransactions
+	UTXOSet.UpdateTx(tx)
+	return tx
 }
 
 /*
