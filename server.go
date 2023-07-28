@@ -524,8 +524,9 @@ func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendR
 	Tx := convertToTransaction(req.Block)
 
 	bc := NewBlockchain(req.NodeTo)
+
 	defer bc.db.Close()
-	mutex.Lock()
+
 	UTXOSet := UTXOSet{Blockchain: bc}
 
 	block := Block{
@@ -542,7 +543,6 @@ func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendR
 		a1 := block.Hash
 		b1 := block.Serialize()
 		err := b.Put(a1, b1)
-
 		if err != nil {
 			log.Panic(err)
 		}
@@ -560,13 +560,12 @@ func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendR
 		log.Panic(err)
 	}
 
-	UTXOSet.Update(block)
+	UTXOSet.Update(&block)
 
 	response := &proto.SendResponse{
-		Response: "Success",
+		Byte: block.Hash,
 	}
 
-	mutex.Unlock()
 	return response, nil
 }
 
@@ -630,7 +629,7 @@ func (s *server) SendBlock(ctx context.Context, req *proto.SendBlockRequest) (*p
 		}
 
 		bc.tip = block.Hash
-
+		req.Block.PrevBlockHash = block.Hash
 		return nil
 	})
 	if err != nil {

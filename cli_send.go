@@ -3,18 +3,12 @@ package main
 import (
 	"context"
 	"log"
-	"sync"
 
 	"github.com/boltdb/bolt"
 	"github.com/sleeg00/blockchain/proto"
 )
 
-type SafeBlock struct {
-	block *proto.Block
-	mutex sync.Mutex
-}
-
-func (cli *CLI) request(from, to string, amount int, node_id string, mineNow bool, block *proto.Block, node_from string) {
+func (cli *CLI) request(from, to string, amount int, node_id string, mineNow bool, block *proto.Block, node_from string) []byte {
 
 	log.Println("이전블럭해시", block.PrevBlockHash)
 
@@ -29,19 +23,15 @@ func (cli *CLI) request(from, to string, amount int, node_id string, mineNow boo
 		Block:    block,
 	}
 	log.Println("이전 해쉬-2 : ", block.PrevBlockHash)
+	log.Println("이전 해쉬-2 주소: ", &block.PrevBlockHash)
 
 	// 서버에 요청 보내기
-	response1, err1 := cli.blockchain.Send(context.Background(), request)
-	if err1 != nil {
-		log.Println("Error sending request to node %s: %v", node_id, err1)
+	response, err := cli.blockchain.Send(context.Background(), request)
+	if err != nil {
+		log.Println("Error sending request to node %s: %v", node_id, err)
 
 	}
-
-	log.Println("이전 해쉬-3 : ", block.PrevBlockHash)
-	// 서버 응답 처리...
-	log.Printf("Received response from node %s: %v", node_id, response1)
-	log.Println("이전 해쉬-4 : ", block.PrevBlockHash)
-
+	return response.Byte
 }
 
 func (cli *CLI) requestTransaction(from, to string, amount int, node_id string, mineNow bool, transaction *proto.Transaction, node_from string) {
@@ -69,7 +59,7 @@ func (cli *CLI) requestTransaction(from, to string, amount int, node_id string, 
 
 }
 
-func send(from, to string, amount int, node_id string, mineNow bool) *Block {
+func send(from, to string, amount int, node_id string, mineNow bool) Block {
 	bc := NewBlockchainRead(node_id)
 
 	UTXOSet := UTXOSet{Blockchain: bc}
@@ -111,7 +101,12 @@ func send(from, to string, amount int, node_id string, mineNow bool) *Block {
 		log.Panic(err)
 	}
 
-	newBlock := NewBlock(txs, lastHash, lastHeight+1)
+	blockChannel := make(chan Block) // 채널 생성
+	go func() {
+		newBlock := NewBlock(txs, lastHash, lastHeight+1)
+		blockChannel <- newBlock // 새 블록을 채널에 전달
+	}()
+	newBlock := <-blockChannel // 채널로부터 결과를 받을 때까지 기다립니다.
 
 	return newBlock
 }

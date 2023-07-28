@@ -48,7 +48,7 @@ func main() {
 
 // Run parses command line arguments and processes commands
 func (cli *CLI) Run() {
-	nodeID := "3000"
+	nodeID := "3001"
 
 	cli.validateArgs()
 
@@ -203,12 +203,12 @@ func (cli *CLI) Run() {
 		}
 
 		if *sendMine {
-			newBlockPtr := send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
+			newblock := send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
 
 			// 새로운 슬라이스를 만들고 txs의 값을 복사
 			var protoTransactions []*proto.Transaction
 
-			for _, tx := range newBlockPtr.Transactions {
+			for _, tx := range newblock.Transactions {
 
 				// 각 *Transaction을 proto.Transaction으로 매핑해서 protoTransactions 슬라이스에 추가합니다.
 				protoTx := &proto.Transaction{
@@ -237,14 +237,6 @@ func (cli *CLI) Run() {
 			}
 
 			for i := 0; i < len(knownNodes); i++ {
-				var newblock BlockCopy
-				newblock.Hash = newBlockPtr.Hash
-				newblock.PrevBlockHash = newBlockPtr.PrevBlockHash
-				newblock.Transactions = make([]*Transaction, len(newBlockPtr.Transactions))
-				copy(newblock.Transactions, newBlockPtr.Transactions)
-				newblock.Height = newBlockPtr.Height
-				newblock.Nonce = newBlockPtr.Nonce
-				log.Println(knownNodes[i])
 
 				serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
 
@@ -269,7 +261,8 @@ func (cli *CLI) Run() {
 					Height:        int32(newblock.Height),
 				}
 
-				cli.request(*sendFrom, *sendTo, *sendAmount, knownNodes[i][10:], *sendMine, block, cli.nodeID)
+				byte := cli.request(*sendFrom, *sendTo, *sendAmount, knownNodes[i][10:], *sendMine, block, cli.nodeID)
+				newblock.PrevBlockHash = byte
 
 			}
 

@@ -67,7 +67,7 @@ message TXOutput {
 
 
 message SendResponse {
-    string response = 1;
+    bytes byte = 1;
 }
 
 message CreateWalletRequest {

@@ -26,6 +26,9 @@ func (cli *CLI) printChain(nodeID string) {
 		for _, tx := range block.Transactions {
 			fmt.Println(tx)
 		}
+		UTXOSet := UTXOSet{Blockchain: bc}
+		fmt.Println(UTXOSet.CountTransactions())
+		fmt.Println(UTXOSet.Blockchain.tip)
 		fmt.Printf("\n\n")
 
 		if len(block.PrevBlockHash) == 0 {

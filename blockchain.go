@@ -347,7 +347,7 @@ func (bc *Blockchain) MineBlock(transactions []*Transaction) *Block {
 		log.Panic(err)
 	}
 
-	return newBlock
+	return &newBlock
 }
 
 // 트랜잭션 사인

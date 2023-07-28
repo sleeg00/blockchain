@@ -105,7 +105,7 @@ func (cli *CLI) startNode(nodeID, minerAddress string) {
 
 			wg.Add(1)
 
-			var newBlock *Block
+			var newBlock Block
 			// 블록 생성 작업을 고루틴으로 실행
 			go func() {
 				newBlock = NewBlock(txs, lastHash, lastHeight+1)
@@ -206,7 +206,7 @@ func (cli *CLI) startNode(nodeID, minerAddress string) {
 		StartServer(nodeID, minerAddress)
 	}
 }
-func makeClientTransaction(newBlock *Block) []*proto.Transaction {
+func makeClientTransaction(newBlock Block) []*proto.Transaction {
 	var protoTransactions []*proto.Transaction
 
 	for _, tx := range newBlock.Transactions {
