@@ -48,8 +48,7 @@ func main() {
 
 // Run parses command line arguments and processes commands
 func (cli *CLI) Run() {
-	nodeID := "3001"
-
+	nodeID := "3002"
 	cli.validateArgs()
 
 	getBalanceCmd := flag.NewFlagSet("getbalance", flag.ExitOnError)
@@ -207,34 +206,48 @@ func (cli *CLI) Run() {
 
 			// 새로운 슬라이스를 만들고 txs의 값을 복사
 			var protoTransactions []*proto.Transaction
+			protoTransactions = makeClientTransactions(newblock.Transactions)
 
-			for _, tx := range newblock.Transactions {
+			var wg sync.WaitGroup
+			for i := 0; i < len(knownNodes); i++ {
+				wg.Add(1)
+				go func(i int) {
+					defer wg.Done()
+					serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
 
-				// 각 *Transaction을 proto.Transaction으로 매핑해서 protoTransactions 슬라이스에 추가합니다.
-				protoTx := &proto.Transaction{
-					Id:   tx.ID,
-					Vin:  []*proto.TXInput{},
-					Vout: []*proto.TXOutput{},
-				}
-				for _, vin := range tx.Vin {
-					pbVin := &proto.TXInput{
-						Txid:      vin.Txid,
-						Vout:      int64(vin.Vout),
-						Signature: vin.Signature,
-						PubKey:    vin.PubKey,
+					conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+					if err != nil {
+						log.Fatalf("Failed to connect to gRPC server: %v", err)
 					}
-					protoTx.Vin = append(protoTx.Vin, pbVin)
-				}
-				for _, vout := range tx.Vout {
-					pbVout := &proto.TXOutput{
-						Value:      int64(vout.Value),
-						PubKeyHash: vout.PubKeyHash,
-					}
-					protoTx.Vout = append(protoTx.Vout, pbVout)
-				}
-				protoTransactions = append(protoTransactions, protoTx)
+					defer conn.Close()
 
+					client := blockchain.NewBlockchainServiceClient(conn)
+					cli := CLI{
+						nodeID:     nodeID,
+						blockchain: client,
+					}
+
+					block := &proto.Block{
+						Timestamp:     newblock.Timestamp,
+						Transactions:  protoTransactions,
+						PrevBlockHash: newblock.PrevBlockHash,
+						Hash:          newblock.Hash,
+						Nonce:         int32(newblock.Nonce),
+						Height:        int32(newblock.Height),
+					}
+
+					byte := cli.request(knownNodes[i][10:], block)
+					newblock.PrevBlockHash = byte
+				}(i)
 			}
+			wg.Wait()
+			// Your existing code...
+
+		} else {
+			//-----모든 노드 mempool에 TX를 저장시킨다. -> UTXO도 업데이트 했다. //Block시도 확인해야한다.
+			tx := sendTrsaction(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
+
+			protoTx := makeOneTransaction(tx)
 
 			for i := 0; i < len(knownNodes); i++ {
 
@@ -252,77 +265,10 @@ func (cli *CLI) Run() {
 					blockchain: client,
 				}
 
-				block := &proto.Block{
-					Timestamp:     newblock.Timestamp,
-					Transactions:  protoTransactions,
-					PrevBlockHash: newblock.PrevBlockHash,
-					Hash:          newblock.Hash,
-					Nonce:         int32(newblock.Nonce),
-					Height:        int32(newblock.Height),
-				}
-
-				byte := cli.request(*sendFrom, *sendTo, *sendAmount, knownNodes[i][10:], *sendMine, block, cli.nodeID)
-				newblock.PrevBlockHash = byte
+				cli.requestTransaction(*sendFrom, *sendTo, *sendAmount, knownNodes[i][10:], *sendMine, protoTx, cli.nodeID)
 
 			}
 
-		} else {
-
-			//-----모든 노드 mempool에 TX를 저장시킨다. -> UTXO도 업데이트 했다. //Block시도 확인해야한다.
-			tx := sendTrsaction(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
-			log.Println(tx)
-			var protoTransactions *proto.Transaction
-
-			// 각 *Transaction을 proto.Transaction으로 매핑해서 protoTransactions 슬라이스에 추가합니다.
-			protoTx := &proto.Transaction{
-				Id:   tx.ID,
-				Vin:  []*proto.TXInput{},
-				Vout: []*proto.TXOutput{},
-			}
-			for _, vin := range tx.Vin {
-				pbVin := &proto.TXInput{
-					Txid:      vin.Txid,
-					Vout:      int64(vin.Vout),
-					Signature: vin.Signature,
-					PubKey:    vin.PubKey,
-				}
-				protoTx.Vin = append(protoTx.Vin, pbVin)
-			}
-			for _, vout := range tx.Vout {
-				pbVout := &proto.TXOutput{
-					Value:      int64(vout.Value),
-					PubKeyHash: vout.PubKeyHash,
-				}
-				protoTx.Vout = append(protoTx.Vout, pbVout)
-			}
-			protoTransactions = protoTx
-
-			var wg sync.WaitGroup //고루틴이 완료되기를 기다리기 위한 준비를 합니다.
-			for i := 0; i < len(knownNodes); i++ {
-				wg.Add(1) // 고루틴의 수를 증가시킵니다.
-				go func(index int) {
-					defer wg.Done() // 해당 고루틴이 끝나면 WaitGroup에서 하나를 차감합니다.
-
-					serverAddress := fmt.Sprintf("localhost:%s", knownNodes[index][10:])
-
-					conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-					if err != nil {
-						log.Fatalf("Failed to connect to gRPC server: %v", err)
-					}
-					defer conn.Close()
-
-					client := blockchain.NewBlockchainServiceClient(conn)
-					cli := CLI{
-						nodeID:     nodeID,
-						blockchain: client,
-					}
-
-					cli.requestTransaction(*sendFrom, *sendTo, *sendAmount, knownNodes[index][10:], *sendMine, protoTransactions, cli.nodeID)
-
-				}(i)
-
-			}
-			wg.Wait()
 			//-----모든 노드 mempool에 TX를 저장시킨다.
 		}
 	}
@@ -348,8 +294,8 @@ func (cli *CLI) Run() {
 	}
 }
 
-func convertFromProtoTransaction(ptx *blockchain.Transaction) *Transaction {
-	return &Transaction{
+func convertFromProtoTransaction(ptx *blockchain.Transaction) Transaction {
+	return Transaction{
 		ID:   ptx.Id,
 		Vin:  convertFromProtoInputs(ptx.Vin),
 		Vout: convertFromProtoOutputs(ptx.Vout),
@@ -378,13 +324,4 @@ func convertFromProtoOutputs(protoOutputs []*blockchain.TXOutput) []TXOutput {
 		})
 	}
 	return outputs
-}
-
-type BlockCopy struct {
-	Timestamp     int64
-	Transactions  []*Transaction
-	PrevBlockHash []byte
-	Hash          []byte
-	Nonce         int
-	Height        int
 }

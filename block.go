@@ -19,6 +19,7 @@ type Block struct {
 
 // NewBlock creates and returns Block
 func NewBlock(transactions []*Transaction, prevBlockHash []byte, height int) Block {
+
 	block := Block{
 		Timestamp:     time.Now().Unix(),
 		Transactions:  transactions,
@@ -27,12 +28,13 @@ func NewBlock(transactions []*Transaction, prevBlockHash []byte, height int) Blo
 		Nonce:         0,
 		Height:        height,
 	}
+	log.Println("\n\n\n\n\nBLOCK: ", block)
 	pow := NewProofOfWork(&block)
 	nonce, hash := pow.Run()
 
 	block.Hash = hash[:]
 	block.Nonce = nonce
-
+	log.Println("nonce", nonce)
 	return block
 }
 
@@ -67,8 +69,9 @@ func (b *Block) HashTransactions() []byte {
 	for _, tx := range b.Transactions {
 		transactions = append(transactions, tx.Serialize())
 	}
-	mTree := NewMerkleTree(transactions)
 
+	mTree := NewMerkleTree(transactions)
+	log.Println("mTREE")
 	return mTree.RootNode.Data
 }
 

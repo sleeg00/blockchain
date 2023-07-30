@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
 	"errors"
@@ -10,6 +11,8 @@ import (
 	"os"
 
 	"github.com/boltdb/bolt"
+	blockchain "github.com/sleeg00/blockchain/proto"
+	"google.golang.org/grpc"
 )
 
 const dbFile = "blockchain_%s.db"
@@ -165,13 +168,14 @@ func (bc *Blockchain) AddBlock(block *Block) {
 
 // FindTransaction finds a transaction by its ID
 func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
+
 	bci := bc.Iterator()
 
 	for {
 		block := bci.Next()
 
 		for _, tx := range block.Transactions {
-			if bytes.Compare(tx.ID, ID) == 0 {
+			if bytes.Equal(tx.ID, ID) {
 				return *tx, nil
 			}
 		}
@@ -179,6 +183,52 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 		if len(block.PrevBlockHash) == 0 {
 			break
 		}
+	}
+
+	UTXOSet := UTXOSet{Blockchain: bc}
+	db := UTXOSet.Blockchain.db
+
+	var c *bolt.Cursor
+	var resultTx *Transaction
+
+	err := db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(utxoBucket))
+		c = b.Cursor()
+
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+
+			if bytes.Equal(k, ID) {
+				conn, err := grpc.Dial("localhost:3000", grpc.WithInsecure())
+				if err != nil {
+					log.Fatalf("Failed to connect to gRPC server: %v", err)
+				}
+				defer conn.Close()
+
+				client := blockchain.NewBlockchainServiceClient(conn)
+
+				request := &blockchain.FindMempoolRequest{
+					NodeId:  "3000",
+					HexTxId: hex.EncodeToString(ID),
+				}
+				cli := CLI{
+					nodeID:     "3000",
+					blockchain: client,
+				}
+				response, err := cli.blockchain.FindMempool(context.Background(), request)
+				tx := convertToOneTransaction(response.Transaction)
+				resultTx = &tx
+				log.Println("\n\n\n\n찾은 TX", resultTx)
+				return nil
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.Panic(err)
+	} else {
+		return *resultTx, nil
 	}
 
 	return Transaction{}, errors.New("Transaction is not found")
@@ -355,9 +405,11 @@ func (bc *Blockchain) SignTransaction(tx *Transaction, privKey ecdsa.PrivateKey)
 	prevTXs := make(map[string]Transaction)
 
 	for _, vin := range tx.Vin {
-		prevTX, err := bc.FindTransaction(vin.Txid)
-		if err != nil {
 
+		prevTX, err := bc.FindTransaction(vin.Txid)
+		log.Println("prevTx: ", prevTX)
+		if err != nil {
+			log.Println("\n\n", vin.Txid, "가 없습니다\n")
 			log.Panic(err)
 		}
 		prevTXs[hex.EncodeToString(prevTX.ID)] = prevTX

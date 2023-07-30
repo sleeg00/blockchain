@@ -229,6 +229,7 @@ func NewUTXOTransaction(wallet *Wallet, to string, amount int, UTXOSet *UTXOSet)
 
 	tx := Transaction{nil, inputs, outputs}
 	tx.ID = tx.Hash()
+	log.Println(tx)
 	UTXOSet.Blockchain.SignTransaction(&tx, wallet.PrivateKey)
 
 	return &tx
@@ -245,4 +246,16 @@ func DeserializeTransaction(data []byte) Transaction {
 	}
 
 	return transaction
+}
+
+func DeserializeTransactionPointer(data []byte) *Transaction {
+	var transaction Transaction
+
+	decoder := gob.NewDecoder(bytes.NewReader(data))
+	err := decoder.Decode(&transaction)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return &transaction
 }

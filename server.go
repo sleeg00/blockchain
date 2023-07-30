@@ -521,14 +521,15 @@ func (s *server) CreateBlockchain(ctx context.Context, req *blockchain.CreateBlo
 
 func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendResponse, error) {
 
+	log.Println("1")
 	Tx := convertToTransaction(req.Block)
 
 	bc := NewBlockchain(req.NodeTo)
-
+	log.Println("2")
 	defer bc.db.Close()
-
+	b := req.Block.PrevBlockHash
 	UTXOSet := UTXOSet{Blockchain: bc}
-
+	log.Println("3")
 	block := Block{
 		Timestamp:     req.Block.Timestamp,
 		PrevBlockHash: req.Block.PrevBlockHash,
@@ -537,7 +538,7 @@ func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendR
 		Nonce:         int(req.Block.Nonce),
 		Height:        int(req.Block.Height),
 	}
-
+	log.Println("?")
 	err := bc.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		a1 := block.Hash
@@ -559,11 +560,11 @@ func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendR
 	if err != nil {
 		log.Panic(err)
 	}
-
+	log.Println("??")
 	UTXOSet.Update(&block)
 
 	response := &proto.SendResponse{
-		Byte: block.Hash,
+		Byte: b,
 	}
 
 	return response, nil
@@ -575,10 +576,11 @@ func (s *server) Mining(ctx context.Context, req *proto.MiningRequest) (*proto.M
 	for _, key := range keys {
 		transaction := mempool[key]
 		tx = append(tx, transaction)
-		delete(mempool, key)
-	}
 
+	}
+	log.Println("mempool에 저장한 TX들", tx)
 	changeTx := convertToProtoTransactions(tx)
+
 	response := &proto.MiningResponse{
 
 		Response:     "Mining response 2",
@@ -587,12 +589,20 @@ func (s *server) Mining(ctx context.Context, req *proto.MiningRequest) (*proto.M
 	return response, nil
 }
 
+func (s *server) FindMempool(ctx context.Context, req *proto.FindMempoolRequest) (*proto.FindMempoolResponse, error) {
+
+	tx := makeTransactionNotPointer(mempool[req.HexTxId])
+	return &proto.FindMempoolResponse{
+		Transaction: tx,
+	}, nil
+}
 func (s *server) SendTransaction(ctx context.Context, req *proto.SendTransactionRequest) (*proto.ResponseTransaction, error) {
 
 	tx := convertToOneTransaction(req.Transaction)
+
 	mempool[hex.EncodeToString(req.Transaction.Id)] = tx
-	log.Println("노드 아이디 : ", req.NodeTo, " mempool에 TX 받는중")
-	log.Println("Transaction ID : ", req.Transaction.Id, "\n hex: ", hex.EncodeToString(req.Transaction.Id))
+	log.Println(len(mempool))
+	log.Println("\n hex: ", hex.EncodeToString(req.Transaction.Id))
 	for key := range mempool {
 		keys = append(keys, key)
 	}

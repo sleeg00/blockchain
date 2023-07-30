@@ -2,35 +2,31 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/boltdb/bolt"
 	"github.com/sleeg00/blockchain/proto"
 )
 
-func (cli *CLI) request(from, to string, amount int, node_id string, mineNow bool, block *proto.Block, node_from string) []byte {
+func (cli *CLI) request(node_id string, block *proto.Block) []byte {
 
 	log.Println("이전블럭해시", block.PrevBlockHash)
 
 	// 서버에 보낼 요청 메시지 생성
 	request := &proto.SendRequest{
-		From:     from,
-		To:       to,
-		Amount:   int32(amount),
-		NodeFrom: node_from,
-		NodeTo:   node_id,
-		MineNow:  mineNow,
-		Block:    block,
+		NodeTo: node_id,
+		Block:  block,
 	}
 	log.Println("이전 해쉬-2 : ", block.PrevBlockHash)
-	log.Println("이전 해쉬-2 주소: ", &block.PrevBlockHash)
 
 	// 서버에 요청 보내기
 	response, err := cli.blockchain.Send(context.Background(), request)
 	if err != nil {
-		log.Println("Error sending request to node %s: %v", node_id, err)
+		fmt.Println("Error sending request to node %s: %v", node_id, err)
 
 	}
+	log.Println(response.Byte)
 	return response.Byte
 }
 
@@ -46,7 +42,6 @@ func (cli *CLI) requestTransaction(from, to string, amount int, node_id string, 
 		Transaction: transaction,
 	}
 
-	log.Println("Request에러는 아님 ")
 	// 서버에 요청 보내기
 	response1, err1 := cli.blockchain.SendTransaction(context.Background(), request)
 	if err1 != nil {

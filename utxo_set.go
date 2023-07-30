@@ -143,13 +143,14 @@ func (u UTXOSet) Reindex() {
 func (u UTXOSet) Update(block *Block) {
 
 	log.Println("\n\n블럭이전해시  : ", block.PrevBlockHash)
-
+	log.Println("\n\n\n블럭", block.Transactions)
 	db := u.Blockchain.db
-
+	defer db.Close()
 	err := db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(utxoBucket))
-
+		log.Println("????")
 		for _, tx := range block.Transactions {
+			log.Println("\n\n\n\nTx    -  - -", tx)
 			if !tx.IsCoinbase() {
 
 				for _, vin := range tx.Vin {
@@ -184,7 +185,7 @@ func (u UTXOSet) Update(block *Block) {
 
 				}
 			}
-
+			log.Println("??????")
 			newOutputs := TXOutputs{}
 			for _, out := range tx.Vout {
 				newOutputs.Outputs = append(newOutputs.Outputs, out)

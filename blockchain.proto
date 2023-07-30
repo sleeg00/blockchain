@@ -18,12 +18,7 @@ message VersionResponse {
 
 
 message SendRequest {
-  string node_from=1;
-  string from = 2;
-  string to = 3;
-  int32 amount = 4;
   string node_to = 5;
-  bool mine_now = 6;
   Block Block =7;
 }
 
@@ -56,6 +51,7 @@ message TXInput {
   bytes txid = 1;
   int64  vout = 2;
   bytes signature = 3;
+
   bytes pub_key = 4;
 }
 
@@ -116,6 +112,16 @@ message SendBlockRequest {
 message SendBlockResponse {
   string response = 1;
 }
+
+message FindMempoolRequest {
+  string node_id = 1;
+  string hex_tx_id = 2;
+}
+
+message FindMempoolResponse {
+  Transaction transaction = 1;
+}
+
 service BlockchainService {
 
  rpc Send(SendRequest) returns (SendResponse) {}
@@ -131,4 +137,6 @@ service BlockchainService {
   rpc Mining(MiningRequest) returns (MiningResponse) {}
 
   rpc SendBlock(SendBlockRequest) returns (SendBlockResponse) {}
+
+  rpc FindMempool (FindMempoolRequest) returns (FindMempoolResponse){}
 }
