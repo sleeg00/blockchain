@@ -28,13 +28,12 @@ func NewBlock(transactions []*Transaction, prevBlockHash []byte, height int) Blo
 		Nonce:         0,
 		Height:        height,
 	}
-	log.Println("\n\n\n\n\nBLOCK: ", block)
+
 	pow := NewProofOfWork(&block)
 	nonce, hash := pow.Run()
 
 	block.Hash = hash[:]
 	block.Nonce = nonce
-	log.Println("nonce", nonce)
 	return block
 }
 
@@ -71,7 +70,7 @@ func (b *Block) HashTransactions() []byte {
 	}
 
 	mTree := NewMerkleTree(transactions)
-	log.Println("mTREE")
+
 	return mTree.RootNode.Data
 }
 

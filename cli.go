@@ -44,11 +44,41 @@ func main() {
 	cli := CLI{}
 
 	cli.Run()
+	/*
+			// Store the original os.Args
+		originalArgs := os.Args
+
+		for i := 0; i < 10; i++ {
+			// Modify os.Args to contain the command and its arguments
+			os.Args = []string{
+				originalArgs[0], // The program name (e.g., "my_program")
+				"send",          // The command you want to execute
+				"-from",
+				"12aTcP7x7PxZcqs7DbsPUS1NY8HZcaVwqV",
+				"-to",
+				"1K6BBBMDJVEjP4ZdBMNvN2jKVc2CeHTEWA",
+				"-amount",
+				"1",
+				"-mine"
+			}
+
+			// Call the Run() function to process the modified os.Args
+			cli := CLI{}
+			cli.Run()
+		}
+
+		// Restore the original os.Args
+		os.Args = originalArgs
+	*/
 }
 
 // Run parses command line arguments and processes commands
 func (cli *CLI) Run() {
-	nodeID := "3002"
+
+	var nodeID string
+	fmt.Println("Enter the new value of nodeID:")
+	fmt.Scanln(&nodeID)
+	fmt.Printf("New nodeID: %s\n", nodeID)
 	cli.validateArgs()
 
 	getBalanceCmd := flag.NewFlagSet("getbalance", flag.ExitOnError)
@@ -69,6 +99,7 @@ func (cli *CLI) Run() {
 	sendMine := sendCmd.Bool("mine", false, "Mine immediately on the same node")
 	startNodeMiner := startNodeCmd.String("miner", "", "Enable mining mode and send reward to ADDRESS")
 	node := nodeCmd.String("node", "", "Node is Setting")
+
 	switch os.Args[1] {
 	case "getbalance":
 		err := getBalanceCmd.Parse(os.Args[2:])
@@ -121,12 +152,22 @@ func (cli *CLI) Run() {
 	}
 
 	if nodeCmd.Parsed() {
-		err := os.Setenv("nodeID", *node)
+		nodeID = *node
+		serverAddress := fmt.Sprintf("localhost:%s", nodeID)
+
+		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
 		if err != nil {
-			log.Println("노드 번호 설정 실패")
-			return
+			log.Fatalf("Failed to connect to gRPC server: %v", err)
 		}
-		log.Println("node is setting : ", *node)
+		defer conn.Close()
+
+		client := blockchain.NewBlockchainServiceClient(conn)
+		cli := CLI{
+			nodeID:     nodeID,
+			blockchain: client,
+		}
+		cli.startNode(cli.nodeID, "")
+
 	}
 	if getBalanceCmd.Parsed() {
 		if *getBalanceAddress == "" {
@@ -203,6 +244,7 @@ func (cli *CLI) Run() {
 
 		if *sendMine {
 			newblock := send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
+			//만약 블럭이 7개가 쌓였으면 인코딩한다
 
 			// 새로운 슬라이스를 만들고 txs의 값을 복사
 			var protoTransactions []*proto.Transaction
@@ -236,11 +278,15 @@ func (cli *CLI) Run() {
 						Height:        int32(newblock.Height),
 					}
 
-					byte := cli.request(knownNodes[i][10:], block)
+					byte := cli.gRPCsendBlockRequest(knownNodes[i][10:], block)
 					newblock.PrevBlockHash = byte
 				}(i)
 			}
 			wg.Wait()
+			if newblock.Height%7 == 0 && newblock.Height != 0 {
+				log.Println("RsEncoding!!!!!")
+				RsEncoding(int32(newblock.Height / 7))
+			}
 			// Your existing code...
 
 		} else {
@@ -294,6 +340,8 @@ func (cli *CLI) Run() {
 	}
 }
 
+// 12aTcP7x7PxZcqs7DbsPUS1NY8HZcaVwqV
+// 1K6BBBMDJVEjP4ZdBMNvN2jKVc2CeHTEWA
 func convertFromProtoTransaction(ptx *blockchain.Transaction) Transaction {
 	return Transaction{
 		ID:   ptx.Id,
@@ -324,4 +372,11 @@ func convertFromProtoOutputs(protoOutputs []*blockchain.TXOutput) []TXOutput {
 		})
 	}
 	return outputs
+}
+
+func checkErr(err error) {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
+		os.Exit(2)
+	}
 }

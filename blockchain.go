@@ -166,14 +166,14 @@ func (bc *Blockchain) AddBlock(block *Block) {
 	}
 }
 
-// FindTransaction finds a transaction by its ID
+// Input TXID에 맞는 TX가 있는지 찾는디 //이걸 UTXO를 찾는 것으로 바꿔도 될 거 같다
 func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 
 	bci := bc.Iterator()
 
 	for {
-		block := bci.Next()
-
+		block, err := bci.Next()
+		checkErr(err)
 		for _, tx := range block.Transactions {
 			if bytes.Equal(tx.ID, ID) {
 				return *tx, nil
@@ -241,8 +241,8 @@ func (bc *Blockchain) FindUTXO() map[string]TXOutputs {
 	bci := bc.Iterator()
 
 	for {
-		block := bci.Next()
-
+		block, err := bci.Next()
+		checkErr(err)
 		for _, tx := range block.Transactions {
 			txID := hex.EncodeToString(tx.ID)
 
@@ -334,8 +334,8 @@ func (bc *Blockchain) GetBlockHashes() [][]byte {
 	bci := bc.Iterator()
 
 	for {
-		block := bci.Next()
-
+		block, err := bci.Next()
+		checkErr(err)
 		blocks = append(blocks, block.Hash)
 
 		if len(block.PrevBlockHash) == 0 {
@@ -352,7 +352,7 @@ func (bc *Blockchain) MineBlock(transactions []*Transaction) *Block {
 	var lastHeight int
 
 	for _, tx := range transactions {
-		// TODO: ignore transaction if it's not valid
+		//풀 노드에서 TX가 not Valid한지 판단
 		if !bc.VerifyTransaction(tx) {
 			log.Panic("ERROR: Invalid transaction")
 		}
@@ -418,7 +418,7 @@ func (bc *Blockchain) SignTransaction(tx *Transaction, privKey ecdsa.PrivateKey)
 	tx.Sign(privKey, prevTXs)
 }
 
-// 이전 트랜잭션 유효한지 검사
+// 풀노드에서 트랜잭션 not Valid 판단
 func (bc *Blockchain) VerifyTransaction(tx *Transaction) bool {
 	if tx.IsCoinbase() {
 		return true
@@ -427,7 +427,7 @@ func (bc *Blockchain) VerifyTransaction(tx *Transaction) bool {
 	prevTXs := make(map[string]Transaction)
 
 	for _, vin := range tx.Vin {
-		prevTX, err := bc.FindTransaction(vin.Txid)
+		prevTX, err := bc.FindTransaction(vin.Txid) //내가 받은 TX가 존재하는 TX인지 검사 이전 TX에 추가
 		if err != nil {
 			log.Panic(err)
 		}

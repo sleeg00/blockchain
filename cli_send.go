@@ -9,16 +9,13 @@ import (
 	"github.com/sleeg00/blockchain/proto"
 )
 
-func (cli *CLI) request(node_id string, block *proto.Block) []byte {
-
-	log.Println("이전블럭해시", block.PrevBlockHash)
+func (cli *CLI) gRPCsendBlockRequest(node_id string, block *proto.Block) []byte {
 
 	// 서버에 보낼 요청 메시지 생성
 	request := &proto.SendRequest{
 		NodeTo: node_id,
 		Block:  block,
 	}
-	log.Println("이전 해쉬-2 : ", block.PrevBlockHash)
 
 	// 서버에 요청 보내기
 	response, err := cli.blockchain.Send(context.Background(), request)
@@ -26,7 +23,7 @@ func (cli *CLI) request(node_id string, block *proto.Block) []byte {
 		fmt.Println("Error sending request to node %s: %v", node_id, err)
 
 	}
-	log.Println(response.Byte)
+
 	return response.Byte
 }
 
@@ -104,11 +101,12 @@ func send(from, to string, amount int, node_id string, mineNow bool) Block {
 	newBlock := <-blockChannel // 채널로부터 결과를 받을 때까지 기다립니다.
 
 	return newBlock
+
 }
 
 func sendTrsaction(from, to string, amount int, node_id string, mineNow bool) *Transaction {
 	bc := NewBlockchain(node_id)
-	defer bc.db.Close()
+
 	UTXOSet := UTXOSet{Blockchain: bc}
 
 	wallets, err := NewWallets(node_id) //wallet.node_id 확인
@@ -124,6 +122,7 @@ func sendTrsaction(from, to string, amount int, node_id string, mineNow bool) *T
 		log.Panic("ERROR: Invalid transaction")
 	}
 	UTXOSet.UpdateTx(tx)
+	bc.db.Close()
 	return tx
 }
 

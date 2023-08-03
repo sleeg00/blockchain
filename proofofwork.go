@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-	"log"
 	"math"
 	"math/big"
 )
@@ -23,7 +22,7 @@ type ProofOfWork struct {
 
 // NewProofOfWork builds and returns a ProofOfWork
 func NewProofOfWork(b *Block) *ProofOfWork {
-	log.Println("newProofofWork")
+
 	target := big.NewInt(1)
 	target.Lsh(target, uint(256-targetBits))
 
@@ -33,7 +32,7 @@ func NewProofOfWork(b *Block) *ProofOfWork {
 }
 
 func (pow *ProofOfWork) prepareData(nonce int) []byte {
-	log.Println(nonce, "nonce")
+
 	data := bytes.Join(
 		[][]byte{
 			pow.block.PrevBlockHash,
