@@ -240,13 +240,15 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 		newBlockBytes := block.Serialize()
 		// 비어있는 곳을 0으로 채운 후, newBlockBytes의 내용을 복사합니다
 		data[i] = make([]byte, 1280)
-		for j := 0; j < len(newBlockBytes); j++ {
-			data[i][j] = newBlockBytes[j]
+		copy(data[i], newBlockBytes)
+		if i == 0 || i == 1 {
+			log.Println("데이타- ---- -----", data[i])
+			log.Println("블럭으로 ------", DeserializeBlock(data[i]))
 		}
 		for j := len(newBlockBytes); j < 1280; j++ {
 			data[i][j] = 0x20
 		}
-		log.Println(len(data[i]))
+
 	}
 	for i := 7; i < 10; i++ {
 		data[i] = make([]byte, 1280)
@@ -300,8 +302,8 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	return &blockchain.RSEncodingResponse{}, nil
 }
 
-func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*proto.GetShardResponse, error) {
-	bc := NewBlockchain(req.NodeId)
+func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkTransactionRequest) (*proto.FindChunkTransactionReponse, error) {
+	bc := NewBlockchainRead(req.NodeId)
 
 	nodeId, err := strconv.Atoi(req.NodeId)
 	checkErr(err)
@@ -324,10 +326,52 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 
 	checkErr(err)
 
-	log.Println(data)
-	return &proto.GetShardResponse{
-		Bytes: data,
+	block := DeserializeBlock(data)
+
+	var tx *Transaction
+	for _, tx = range block.Transactions {
+		if bytes.Equal(tx.ID, req.VinId) {
+			log.Println("TX----", tx)
+			return &proto.FindChunkTransactionReponse{
+				Transaction: convertToProtoTransaction(tx),
+			}, nil
+		}
+	}
+	return &proto.FindChunkTransactionReponse{
+		Transaction: nil,
 	}, nil
+}
+func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*proto.GetShardResponse, error) {
+	bc := NewBlockchainRead(req.NodeId)
+	defer bc.db.Close()
+	nodeId, err := strconv.Atoi(req.NodeId)
+	checkErr(err)
+	var blockNumber string
+	var data []byte
+
+	if nodeId%3000 < 7 {
+		blockNumber = strconv.Itoa((nodeId % 3000) + int(req.Height*10))
+	} else {
+		blockNumber = "f" + strconv.Itoa((nodeId%3000)+int(req.Height*10))
+	}
+	err = bc.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(blocksBucket))
+		data = b.Get([]byte(blockNumber))
+		if data == nil {
+			log.Panic("뭐임?")
+		}
+		return nil
+	})
+
+	checkErr(err)
+
+	respData := make([]byte, len(data))
+	copy(respData, data)
+
+	return &proto.GetShardResponse{
+		Bytes: respData,
+	}, nil
+
 }
 func (s *server) DeleteMempool(ctx context.Context, req *proto.DeleteMempoolRequest) (*proto.DeleteMempoolResponse, error) {
 	log.Println("\n\n\n\nMEMPOLL SIZE", len(mempool))
@@ -472,4 +516,29 @@ func convertToProtoOutputs(outputs []TXOutput) []*proto.TXOutput {
 		})
 	}
 	return protoOutputs
+}
+func convertToProtoTransaction(tx *Transaction) *proto.Transaction {
+	pbVin := make([]*proto.TXInput, len(tx.Vin))
+	for i, vin := range tx.Vin {
+		pbVin[i] = &proto.TXInput{
+			Txid:      vin.Txid,
+			Vout:      int64(vin.Vout),
+			Signature: vin.Signature,
+			PubKey:    vin.PubKey,
+		}
+	}
+
+	pbVout := make([]*proto.TXOutput, len(tx.Vout))
+	for i, vout := range tx.Vout {
+		pbVout[i] = &proto.TXOutput{
+			Value:      int64(vout.Value),
+			PubKeyHash: vout.PubKeyHash,
+		}
+	}
+
+	return &proto.Transaction{
+		Id:   tx.ID,
+		Vin:  pbVin,
+		Vout: pbVout,
+	}
 }

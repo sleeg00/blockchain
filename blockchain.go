@@ -171,8 +171,12 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 
 	bci := bc.Iterator()
 
-	for {
+	var Height int
+	for x := 0; ; x++ {
 		block, err := bci.Next()
+		if x == 0 {
+			Height = block.Height
+		}
 		checkErr(err)
 		for _, tx := range block.Transactions {
 			if bytes.Equal(tx.ID, ID) {
@@ -180,21 +184,22 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 			}
 		}
 
-		if len(block.PrevBlockHash) == 0 {
+		if len(block.PrevBlockHash) == 0 || x == Height%7 {
+			log.Println("xxxxxxxx", x)
 			break
 		}
 	}
-
+	log.Println("!")
 	UTXOSet := UTXOSet{Blockchain: bc}
 	db := UTXOSet.Blockchain.db
-
+	log.Println("2")
 	var c *bolt.Cursor
 	var resultTx *Transaction
 
 	err := db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(utxoBucket))
 		c = b.Cursor()
-
+		log.Println("3")
 		for k, _ := c.First(); k != nil; k, _ = c.Next() {
 
 			if bytes.Equal(k, ID) {
@@ -217,8 +222,7 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 				response, err := cli.blockchain.FindMempool(context.Background(), request)
 				tx := convertToOneTransaction(response.Transaction)
 				resultTx = &tx
-				log.Println("\n\n\n\n찾은 TX", resultTx)
-				return nil
+
 			}
 		}
 
@@ -226,9 +230,42 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 	})
 
 	if err != nil {
+
 		log.Panic(err)
-	} else {
+	} else if resultTx.ID != nil {
+
 		return *resultTx, nil
+	}
+	log.Println("4")
+	for i := 0; i < len(knownNodes)-3; i++ {
+		log.Println("KKKKK!KK!K!K!")
+		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
+
+		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+		if err != nil {
+			log.Fatalf("Failed to connect to gRPC server: %v", err)
+		}
+		defer conn.Close()
+		log.Println("HEIGHT", Height)
+		client := blockchain.NewBlockchainServiceClient(conn)
+		cli := CLI{
+			nodeID:     knownNodes[i][10:],
+			blockchain: client,
+		}
+		request := &blockchain.FindChunkTransactionRequest{
+			NodeId: knownNodes[i][10:],
+			VinId:  ID,
+			Height: int32(Height/7 - 1),
+		}
+
+		response, err := cli.blockchain.FindChunkTransaction(context.Background(), request)
+
+		tx := response.Transaction
+		//log.Println(DeserializeBlock(bytes))
+
+		if tx != nil {
+			return convertFromProtoTransaction(tx), nil
+		}
 	}
 
 	return Transaction{}, errors.New("Transaction is not found")

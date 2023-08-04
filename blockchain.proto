@@ -135,6 +135,14 @@ message GetShardRequest{
 message GetShardResponse{
   bytes bytes = 1;
 }
+message FindChunkTransactionRequest {
+  string node_id = 1;
+  bytes vin_id = 2;
+  int32 height = 3;
+}
+message FindChunkTransactionReponse {
+  Transaction transaction = 1;
+}
 service BlockchainService {
 
  rpc Send(SendRequest) returns (SendResponse) {}
@@ -158,4 +166,6 @@ service BlockchainService {
   rpc RSEncoding (RSEncodingRequest) returns (RSEncodingResponse) {}
 
   rpc GetShard(GetShardRequest) returns (GetShardResponse){}
+
+  rpc FindChunkTransaction(FindChunkTransactionRequest) returns (FindChunkTransactionReponse) {}
 }

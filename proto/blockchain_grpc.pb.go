@@ -32,6 +32,7 @@ type BlockchainServiceClient interface {
 	DeleteMempool(ctx context.Context, in *DeleteMempoolRequest, opts ...grpc.CallOption) (*DeleteMempoolResponse, error)
 	RSEncoding(ctx context.Context, in *RSEncodingRequest, opts ...grpc.CallOption) (*RSEncodingResponse, error)
 	GetShard(ctx context.Context, in *GetShardRequest, opts ...grpc.CallOption) (*GetShardResponse, error)
+	FindChunkTransaction(ctx context.Context, in *FindChunkTransactionRequest, opts ...grpc.CallOption) (*FindChunkTransactionReponse, error)
 }
 
 type blockchainServiceClient struct {
@@ -132,6 +133,15 @@ func (c *blockchainServiceClient) GetShard(ctx context.Context, in *GetShardRequ
 	return out, nil
 }
 
+func (c *blockchainServiceClient) FindChunkTransaction(ctx context.Context, in *FindChunkTransactionRequest, opts ...grpc.CallOption) (*FindChunkTransactionReponse, error) {
+	out := new(FindChunkTransactionReponse)
+	err := c.cc.Invoke(ctx, "/blockchain.BlockchainService/FindChunkTransaction", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BlockchainServiceServer is the server API for BlockchainService service.
 // All implementations must embed UnimplementedBlockchainServiceServer
 // for forward compatibility
@@ -146,6 +156,7 @@ type BlockchainServiceServer interface {
 	DeleteMempool(context.Context, *DeleteMempoolRequest) (*DeleteMempoolResponse, error)
 	RSEncoding(context.Context, *RSEncodingRequest) (*RSEncodingResponse, error)
 	GetShard(context.Context, *GetShardRequest) (*GetShardResponse, error)
+	FindChunkTransaction(context.Context, *FindChunkTransactionRequest) (*FindChunkTransactionReponse, error)
 	// mustEmbedUnimplementedBlockchainServiceServer()
 }
 
@@ -182,6 +193,9 @@ func (UnimplementedBlockchainServiceServer) RSEncoding(context.Context, *RSEncod
 }
 func (UnimplementedBlockchainServiceServer) GetShard(context.Context, *GetShardRequest) (*GetShardResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetShard not implemented")
+}
+func (UnimplementedBlockchainServiceServer) FindChunkTransaction(context.Context, *FindChunkTransactionRequest) (*FindChunkTransactionReponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method FindChunkTransaction not implemented")
 }
 func (UnimplementedBlockchainServiceServer) mustEmbedUnimplementedBlockchainServiceServer() {}
 
@@ -376,6 +390,24 @@ func _BlockchainService_GetShard_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BlockchainService_FindChunkTransaction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(FindChunkTransactionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlockchainServiceServer).FindChunkTransaction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/blockchain.BlockchainService/FindChunkTransaction",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlockchainServiceServer).FindChunkTransaction(ctx, req.(*FindChunkTransactionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BlockchainService_ServiceDesc is the grpc.ServiceDesc for BlockchainService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -422,6 +454,10 @@ var BlockchainService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetShard",
 			Handler:    _BlockchainService_GetShard_Handler,
+		},
+		{
+			MethodName: "FindChunkTransaction",
+			Handler:    _BlockchainService_FindChunkTransaction_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -7,89 +7,127 @@ import (
 	"strconv"
 
 	"github.com/boltdb/bolt"
-	"github.com/klauspost/reedsolomon"
 	blockchain "github.com/sleeg00/blockchain/proto"
 	"google.golang.org/grpc"
 )
 
 func (cli *CLI) printChain(nodeID string) {
 	nodeId, err := strconv.Atoi(nodeID)
-	bc := NewBlockchain(nodeID)
+	checkErr(err)
+	var blockNumber string
+
+	bc := NewBlockchainRead(nodeID)
 
 	defer bc.db.Close()
 
 	bci := bc.Iterator()
-	block, err := bci.Next()
+
 	if err != nil {
 		log.Println(err)
 	}
-	for i := 0; i <= block.Height/7+(block.Height%7); i++ {
 
-		data := make([][]byte, 10)
-		if i < block.Height/7 { //블럭을 가져오고 만약에 죽었다면 그걸 바탕으로 디코딩해서 원본 파일을 생성
-			log.Println("청크 찾기 ")
-			count := block.Height / 7
+	data := make([][]byte, 10)
 
-			blockSize := 5120 // 고정된 샤드 크기
-			enc, err := reedsolomon.New(7, 3)
-			checkErr(err)
-			log.Println("1")
-			for i := 0; i < len(knownNodes); i++ {
-				log.Println("2")
-				data[i] = make([]byte, blockSize)
+	var Height int
 
-				if knownNodes[i][10:] != nodeID {
-					serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
+	for x := 0; ; x++ {
 
-					conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-					if err != nil {
-						log.Fatalf("Failed to connect to gRPC server: %v", err)
-					}
-					defer conn.Close()
+		block, err := bci.Next()
+		if x == 0 {
+			Height = block.Height
+		}
+		checkErr(err)
+		fmt.Printf("============ Block %x ============\n", block.Hash)
+		fmt.Printf("Height: %d\n", block.Height)
+		fmt.Printf("Prev. block: %x\n", block.PrevBlockHash)
+		pow := NewProofOfWork(block)
+		fmt.Printf("PoW: %s\n\n", strconv.FormatBool(pow.Validate()))
+		for _, tx := range block.Transactions {
+			fmt.Println(tx)
+		}
+		fmt.Printf("\n\n")
 
-					client := blockchain.NewBlockchainServiceClient(conn)
-					cli := CLI{
-						nodeID:     knownNodes[i][10:],
-						blockchain: client,
-					}
-					request := &blockchain.GetShardRequest{
-						NodeId: knownNodes[i][10:],
-						Height: int32(count - 1),
-					}
-					log.Println("3")
-					response, err := cli.blockchain.GetShard(context.Background(), request)
-					log.Println("4")
-					bytes := response.Bytes
-					//log.Println(DeserializeBlock(bytes))
-					data[i] = bytes
+		if len(block.PrevBlockHash) == 0 || x == Height%7 {
+			log.Println("xxxxxxxx", x)
+			break
+		}
+	}
 
+	count := Height / 7
+
+	blockSize := 5120 // 고정된 샤드 크기
+	for i := 0; i < count; i++ {
+		for k := 0; k < len(knownNodes); k++ {
+			data[k] = make([]byte, blockSize)
+			if nodeID == knownNodes[k][10:] {
+				if nodeId%3000 < 7 {
+					blockNumber = strconv.Itoa((nodeId % 3000) + (count-1)*10)
 				} else {
-					blockNumber := strconv.Itoa((nodeId % 3000) + int(block.Height*10))
-					err = bc.db.Update(func(tx *bolt.Tx) error {
-						b := tx.Bucket([]byte(blocksBucket))
-						data[i] = b.Get([]byte(blockNumber))
-
-						return nil
-					})
+					blockNumber = "f" + strconv.Itoa((nodeId%3000)+(count-1)*10)
 				}
+				err = bc.db.View(func(tx *bolt.Tx) error {
+					b := tx.Bucket([]byte(blocksBucket))
+					data[k] = b.Get([]byte(blockNumber))
+					if data == nil {
+						log.Panic("뭐임?")
+					}
+					return nil
+				})
+
+			} else {
+
+				serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
+
+				conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+				if err != nil {
+					log.Fatalf("Failed to connect to gRPC server: %v", err)
+				}
+				defer conn.Close()
+
+				client := blockchain.NewBlockchainServiceClient(conn)
+				cli := CLI{
+					nodeID:     knownNodes[k][10:],
+					blockchain: client,
+				}
+				request := &blockchain.GetShardRequest{
+					NodeId: knownNodes[k][10:],
+					Height: int32(count - 1),
+				}
+				log.Println("3")
+				response, err := cli.blockchain.GetShard(context.Background(), request)
+				log.Println("4")
+				bytes := response.Bytes
+				//log.Println(DeserializeBlock(bytes))
+				data[k] = bytes
+
 				log.Println("5")
 			}
-			ok, err := enc.Verify(data)
-			if !ok {
-				err = enc.Reconstruct(data)
-			}
-			for i := 0; i < 7; i++ {
-				log.Println("^^^^^^")
-				var result []byte
-				for j := 0; j < len(data[i])-1; j++ {
-					if data[i][j] != 0x20 {
-						result = append(result, data[i][j])
-					}
-				}
 
-				log.Println(DeserializeBlock(result))
+		}
+		for x := 0; x < 7; x++ {
+			log.Println("^^^^^^")
+			var result []byte
+
+			for y := 0; y < len(data[x]); y++ {
+
+				result = append(result, data[x][y])
+
 			}
 
+			block := DeserializeBlock(result)
+			fmt.Printf("============ Block %x ============\n", block.Hash)
+			fmt.Printf("Height: %d\n", block.Height)
+			fmt.Printf("Prev. block: %x\n", block.PrevBlockHash)
+			pow := NewProofOfWork(block)
+			fmt.Printf("PoW: %s\n\n", strconv.FormatBool(pow.Validate()))
+			for _, tx := range block.Transactions {
+				fmt.Println(tx)
+			}
+			fmt.Printf("\n\n")
+
+			if len(block.PrevBlockHash) == 0 {
+				break
+			}
 		}
 	}
 }

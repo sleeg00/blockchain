@@ -243,7 +243,7 @@ func (cli *CLI) Run() {
 		}
 
 		if *sendMine {
-			newblock := send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
+			newblock, bc := send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
 			//만약 블럭이 7개가 쌓였으면 인코딩한다
 
 			// 새로운 슬라이스를 만들고 txs의 값을 복사
@@ -288,6 +288,7 @@ func (cli *CLI) Run() {
 				RsEncoding(int32(newblock.Height / 7))
 			}
 			// Your existing code...
+			defer bc.db.Close()
 
 		} else {
 			//-----모든 노드 mempool에 TX를 저장시킨다. -> UTXO도 업데이트 했다. //Block시도 확인해야한다.
