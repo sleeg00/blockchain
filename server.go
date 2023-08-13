@@ -121,7 +121,7 @@ func (s *server) CreateBlockchain(ctx context.Context, req *blockchain.CreateBlo
 		log.Panic("ERROR: Address is not valid")
 	}
 	bc := CreateBlockchain(req.Address, req.NodeId)
-
+	defer bc.db.Close()
 	UTXOSet := UTXOSet{Blockchain: bc}
 	UTXOSet.Reindex()
 	defer bc.db.Close()
@@ -184,7 +184,7 @@ func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendR
 func (s *server) Mining(ctx context.Context, req *proto.MiningRequest) (*proto.MiningResponse, error) {
 
 	var tx []Transaction
-	for key, _ := range mempool {
+	for key := range mempool {
 		tx = append(tx, mempool[key])
 	}
 	log.Println("mempool에 저장한 TX들", tx)
@@ -303,40 +303,52 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 }
 
 func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkTransactionRequest) (*proto.FindChunkTransactionReponse, error) {
-	bc := NewBlockchainRead(req.NodeId)
 
+	bc := NewBlockchainRead(req.NodeId)
+	defer bc.db.Close()
 	nodeId, err := strconv.Atoi(req.NodeId)
 	checkErr(err)
 	var blockNumber string
 	var data []byte
-
-	if nodeId%3000 < 7 {
-		blockNumber = strconv.Itoa((nodeId % 3000) + int(req.Height*10))
-	} else {
-		blockNumber = "f" + strconv.Itoa((nodeId%3000)+int(req.Height*10))
-	}
-	err = bc.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(blocksBucket))
-		data = b.Get([]byte(blockNumber))
-		if data == nil {
-			log.Panic("뭐임?")
+	for i := 0; i <= int(req.Height); i++ {
+		if nodeId%3000 < 7 {
+			blockNumber = strconv.Itoa((nodeId % 3000) + int(req.Height*10))
+		} else {
+			blockNumber = "f" + strconv.Itoa((nodeId%3000)+int(req.Height*10))
 		}
-		return nil
-	})
+		err = bc.db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte(blocksBucket))
+			data = b.Get([]byte(blockNumber))
+			if data == nil {
+				log.Panic("뭐임?")
+			}
+			return nil
+		})
 
-	checkErr(err)
+		checkErr(err)
 
-	block := DeserializeBlock(data)
+		block := DeserializeBlock(data)
 
-	var tx *Transaction
-	for _, tx = range block.Transactions {
-		if bytes.Equal(tx.ID, req.VinId) {
-			log.Println("TX----", tx)
-			return &proto.FindChunkTransactionReponse{
-				Transaction: convertToProtoTransaction(tx),
-			}, nil
+		for _, tx := range block.Transactions {
+			if bytes.Equal(tx.ID, req.VinId) {
+				log.Println("TX----", tx)
+
+				for _, tx := range block.Transactions {
+					if bytes.Equal(tx.ID, req.VinId) {
+						var foundTx Transaction // 구조체 변수 선언
+						log.Println(req.NodeId, "에서 발견")
+						foundTx = tx.TrimmedCopy() // 찾은 트랜잭션의 값을 복사하여 할당
+						return &proto.FindChunkTransactionReponse{
+							Transaction: convertToProtoTransaction(foundTx),
+						}, nil
+					}
+				}
+
+			}
 		}
+
 	}
+
 	return &proto.FindChunkTransactionReponse{
 		Transaction: nil,
 	}, nil
@@ -517,7 +529,7 @@ func convertToProtoOutputs(outputs []TXOutput) []*proto.TXOutput {
 	}
 	return protoOutputs
 }
-func convertToProtoTransaction(tx *Transaction) *proto.Transaction {
+func convertToProtoTransaction(tx Transaction) *proto.Transaction {
 	pbVin := make([]*proto.TXInput, len(tx.Vin))
 	for i, vin := range tx.Vin {
 		pbVin[i] = &proto.TXInput{

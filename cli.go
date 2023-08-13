@@ -235,7 +235,8 @@ func (cli *CLI) Run() {
 	if reindexUTXOCmd.Parsed() {
 		cli.reindexUTXO(nodeID)
 	}
-
+	var failNodes = []string{}
+	var failNodesCheck int
 	if sendCmd.Parsed() {
 		if *sendFrom == "" || *sendTo == "" || *sendAmount <= 0 {
 			sendCmd.Usage()
@@ -243,7 +244,9 @@ func (cli *CLI) Run() {
 		}
 
 		if *sendMine {
-			newblock, bc := send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
+
+			newblock := send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
+			log.Println("sendBlock")
 			//만약 블럭이 7개가 쌓였으면 인코딩한다
 
 			// 새로운 슬라이스를 만들고 txs의 값을 복사
@@ -258,37 +261,43 @@ func (cli *CLI) Run() {
 					serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
 
 					conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-					if err != nil {
-						log.Fatalf("Failed to connect to gRPC server: %v", err)
-					}
 					defer conn.Close()
+					if err != nil {
+						log.Println(knownNodes[i], "에 연결 실패!")
+						failNodes = append(failNodes, knownNodes[i][10:])
+						failNodesCheck++
+						log.Fatalf("Failed to connect to gRPC server: %v", err)
+					} else {
+						client := blockchain.NewBlockchainServiceClient(conn)
+						cli := CLI{
+							nodeID:     nodeID,
+							blockchain: client,
+						}
 
-					client := blockchain.NewBlockchainServiceClient(conn)
-					cli := CLI{
-						nodeID:     nodeID,
-						blockchain: client,
+						block := &proto.Block{
+							Timestamp:     newblock.Timestamp,
+							Transactions:  protoTransactions,
+							PrevBlockHash: newblock.PrevBlockHash,
+							Hash:          newblock.Hash,
+							Nonce:         int32(newblock.Nonce),
+							Height:        int32(newblock.Height),
+						}
+
+						byte := cli.gRPCsendBlockRequest(knownNodes[i][10:], block)
+						newblock.PrevBlockHash = byte
 					}
-
-					block := &proto.Block{
-						Timestamp:     newblock.Timestamp,
-						Transactions:  protoTransactions,
-						PrevBlockHash: newblock.PrevBlockHash,
-						Hash:          newblock.Hash,
-						Nonce:         int32(newblock.Nonce),
-						Height:        int32(newblock.Height),
-					}
-
-					byte := cli.gRPCsendBlockRequest(knownNodes[i][10:], block)
-					newblock.PrevBlockHash = byte
 				}(i)
 			}
 			wg.Wait()
-			if newblock.Height%7 == 0 && newblock.Height != 0 {
+			invaildNodeCount := 10 - failNodesCheck
+			f := (invaildNodeCount - 1) / 3
+			NF := invaildNodeCount - f
+			if newblock.Height%NF == 0 && newblock.Height != 0 {
 				log.Println("RsEncoding!!!!!")
-				RsEncoding(int32(newblock.Height / 7))
+				RsEncoding(int32(newblock.Height/7), int32(f))
 			}
+			log.Println("3")
 			// Your existing code...
-			defer bc.db.Close()
 
 		} else {
 			//-----모든 노드 mempool에 TX를 저장시킨다. -> UTXO도 업데이트 했다. //Block시도 확인해야한다.

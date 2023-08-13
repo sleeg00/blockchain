@@ -189,10 +189,10 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 			break
 		}
 	}
-	log.Println("!")
+
 	UTXOSet := UTXOSet{Blockchain: bc}
 	db := UTXOSet.Blockchain.db
-	log.Println("2")
+
 	var c *bolt.Cursor
 	var resultTx *Transaction
 
@@ -237,37 +237,42 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 		return *resultTx, nil
 	}
 	log.Println("4")
-	for i := 0; i < len(knownNodes)-3; i++ {
-		log.Println("KKKKK!KK!K!K!")
-		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
+	check := Height / 7
+	for j := 0; j < Height/7; j++ {
+		check--
+		for i := 0; i < len(knownNodes)-3; i++ {
+			log.Println("KKKKK!KK!K!K!")
+			serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
 
-		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-		if err != nil {
-			log.Fatalf("Failed to connect to gRPC server: %v", err)
-		}
-		defer conn.Close()
-		log.Println("HEIGHT", Height)
-		client := blockchain.NewBlockchainServiceClient(conn)
-		cli := CLI{
-			nodeID:     knownNodes[i][10:],
-			blockchain: client,
-		}
-		request := &blockchain.FindChunkTransactionRequest{
-			NodeId: knownNodes[i][10:],
-			VinId:  ID,
-			Height: int32(Height/7 - 1),
-		}
+			conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+			if err != nil {
+				log.Fatalf("Failed to connect to gRPC server: %v", err)
+			}
+			defer conn.Close()
+			log.Println("HEIGHT", Height)
 
-		response, err := cli.blockchain.FindChunkTransaction(context.Background(), request)
+			client := blockchain.NewBlockchainServiceClient(conn)
+			cli := CLI{
+				nodeID:     knownNodes[i][10:],
+				blockchain: client,
+			}
+			request := &blockchain.FindChunkTransactionRequest{
+				NodeId: knownNodes[i][10:],
+				VinId:  ID,
+				Height: int32(check),
+			}
 
-		tx := response.Transaction
-		//log.Println(DeserializeBlock(bytes))
+			response, err := cli.blockchain.FindChunkTransaction(context.Background(), request)
 
-		if tx != nil {
-			return convertFromProtoTransaction(tx), nil
+			tx := response.Transaction
+			//log.Println(DeserializeBlock(bytes))
+
+			if tx != nil {
+				return convertFromProtoTransaction(tx), nil
+			}
+
 		}
 	}
-
 	return Transaction{}, errors.New("Transaction is not found")
 }
 
@@ -439,6 +444,7 @@ func (bc *Blockchain) MineBlock(transactions []*Transaction) *Block {
 
 // 트랜잭션 사인
 func (bc *Blockchain) SignTransaction(tx *Transaction, privKey ecdsa.PrivateKey) {
+	log.Println("Sign")
 	prevTXs := make(map[string]Transaction)
 
 	for _, vin := range tx.Vin {
@@ -451,8 +457,9 @@ func (bc *Blockchain) SignTransaction(tx *Transaction, privKey ecdsa.PrivateKey)
 		}
 		prevTXs[hex.EncodeToString(prevTX.ID)] = prevTX
 	}
-
+	log.Println("Prev")
 	tx.Sign(privKey, prevTXs)
+	log.Println("TX.SIGN")
 }
 
 // 풀노드에서 트랜잭션 not Valid 판단

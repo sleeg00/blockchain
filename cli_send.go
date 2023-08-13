@@ -51,7 +51,7 @@ func (cli *CLI) requestTransaction(from, to string, amount int, node_id string, 
 
 }
 
-func send(from, to string, amount int, node_id string, mineNow bool) (Block, Blockchain) {
+func send(from, to string, amount int, node_id string, mineNow bool) Block {
 	bc := NewBlockchainRead(node_id)
 
 	UTXOSet := UTXOSet{Blockchain: bc}
@@ -100,7 +100,7 @@ func send(from, to string, amount int, node_id string, mineNow bool) (Block, Blo
 	}()
 	newBlock := <-blockChannel // 채널로부터 결과를 받을 때까지 기다립니다.
 
-	return newBlock, *bc
+	return newBlock
 
 }
 
