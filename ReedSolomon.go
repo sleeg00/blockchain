@@ -9,9 +9,8 @@ import (
 	"google.golang.org/grpc"
 )
 
-func RsEncoding(count int32, f int32) {
+func RsEncoding(count int32, f int32, NF int32) {
 
-	log.Println("여긴 어디? 나는 누구?..")
 	for i := 0; i < len(knownNodes); i++ {
 		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
 		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
@@ -29,6 +28,8 @@ func RsEncoding(count int32, f int32) {
 		cli.blockchain.RSEncoding(context.Background(), &blockchain.RSEncodingRequest{
 			NodeId: knownNodes[i][10:],
 			Count:  count - 1,
+			F:      f,
+			NF:     NF,
 		})
 	}
 

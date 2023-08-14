@@ -294,7 +294,7 @@ func (cli *CLI) Run() {
 			NF := invaildNodeCount - f
 			if newblock.Height%NF == 0 && newblock.Height != 0 {
 				log.Println("RsEncoding!!!!!")
-				RsEncoding(int32(newblock.Height/7), int32(f))
+				RsEncoding(int32(newblock.Height/7), int32(f), int32(NF))
 			}
 			log.Println("3")
 			// Your existing code...

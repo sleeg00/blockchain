@@ -157,7 +157,7 @@ type BlockchainServiceServer interface {
 	RSEncoding(context.Context, *RSEncodingRequest) (*RSEncodingResponse, error)
 	GetShard(context.Context, *GetShardRequest) (*GetShardResponse, error)
 	FindChunkTransaction(context.Context, *FindChunkTransactionRequest) (*FindChunkTransactionReponse, error)
-	// mustEmbedUnimplementedBlockchainServiceServer()
+	//mustEmbedUnimplementedBlockchainServiceServer()
 }
 
 // UnimplementedBlockchainServiceServer must be embedded to have forward compatible implementations.

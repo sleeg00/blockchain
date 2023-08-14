@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"regexp"
 	"strconv"
 	"sync"
 
@@ -32,6 +33,7 @@ var knownNodes = []string{"localhost:3000", "localhost:3001", "localhost:3002", 
 var blocksInTransit = [][]byte{}
 var mempool = make(map[string]Transaction)
 var keys []string
+var lastIndex int
 
 type server struct {
 }
@@ -228,37 +230,37 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	defer bc.db.Close()
 	bci := bc.Iterator()
 
-	enc, err := reedsolomon.New(7, 3) //7개의 청크 3개의 패리티
+	enc, err := reedsolomon.New(int(req.NF), int(req.F)) //비잔틴 장애 내성 가지도록 설계
 	checkErr(err)
 	//샤딩할 부분을 나눈다
 
-	data := make([][]byte, 10)
+	data := make([][]byte, int(req.NF+req.F))
 
-	for i := 0; i < 7; i++ {
+	for i := 0; i < int(req.NF); i++ {
 		block, err := bci.Next()
 		checkErr(err)
 		newBlockBytes := block.Serialize()
 		// 비어있는 곳을 0으로 채운 후, newBlockBytes의 내용을 복사합니다
 		data[i] = make([]byte, 1280)
 		copy(data[i], newBlockBytes)
-		if i == 0 || i == 1 {
-			log.Println("데이타- ---- -----", data[i])
-			log.Println("블럭으로 ------", DeserializeBlock(data[i]))
-		}
+
 		for j := len(newBlockBytes); j < 1280; j++ {
 			data[i][j] = 0x20
 		}
 
 	}
-	for i := 7; i < 10; i++ {
+
+	for i := req.NF; i < req.NF+req.F; i++ {
 		data[i] = make([]byte, 1280)
 	}
+
 	err = enc.Encode(data)
 	checkErr(err)
 	bci = bc.Iterator()
 
 	bci.Next()
-	for i := 0; i < 7; i++ {
+
+	for i := 0; i < int(req.NF); i++ {
 		block, err := bci.Next()
 		checkErr(err)
 		err = bc.db.Update(func(tx *bolt.Tx) error {
@@ -279,26 +281,47 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 		checkErr(err)
 	}
 
-	var blockNumber string
-	// 0, 1, 2, 3, 4, 5, 6  <- 청크  7, 8, 9 -> 패리티
-	// 10, 11, 12, 13, 14, 15, 16 <- 청크 17, 18, 19 -> 패리티
-	// 20, 21, 22, 23, 24, 25, 26 <- 청크 27, 28, 29 -> 패리티
-	if nodeId%3000 < 7 {
-		blockNumber = strconv.Itoa((nodeId % 3000) + int(req.Count*10))
-	} else {
-		blockNumber = "f" + strconv.Itoa((nodeId%3000)+int(req.Count*10))
-	}
-
+	var lastKey string
 	save := data[nodeId%3000]
 
-	err = bc.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(blocksBucket))
-		b.Put([]byte(blockNumber), save)
+	if req.Count != 0 {
+		err = bc.db.Update(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte(blocksBucket))
+			c := b.Cursor()
+			log.Println(c)
+			if c != nil {
+				// 키 공간을 역순으로 순회하여 가장 마지막 항목을 찾음
+				keyBytes, _ := c.Last()
+				lastKey = string(keyBytes)
+			}
+			return nil
+		})
+		checkErr(err)
 
-		return nil
-	})
-	checkErr(err)
+		_, end := extractNumbersFromKey(lastKey)
+		end = end + 1
+		startIndex := "Hash" + strconv.Itoa(end) + "~" + strconv.Itoa(int(req.NF)+int(req.F)-1)
 
+		err = bc.db.Update(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte(blocksBucket))
+			b.Put([]byte(startIndex), save)
+
+			return nil
+		})
+		checkErr(err)
+	} else {
+
+		startIndex := "Hash0~" + strconv.Itoa(int(req.NF)+(int(req.F)-1))
+		log.Println("startIndex:", startIndex)
+		log.Println("save------", save)
+		err = bc.db.Update(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte(blocksBucket))
+			b.Put([]byte(startIndex), save)
+
+			return nil
+		})
+		checkErr(err)
+	}
 	return &blockchain.RSEncodingResponse{}, nil
 }
 
@@ -356,35 +379,55 @@ func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkT
 func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*proto.GetShardResponse, error) {
 	bc := NewBlockchainRead(req.NodeId)
 	defer bc.db.Close()
-	nodeId, err := strconv.Atoi(req.NodeId)
-	checkErr(err)
-	var blockNumber string
-	var data []byte
 
-	if nodeId%3000 < 7 {
-		blockNumber = strconv.Itoa((nodeId % 3000) + int(req.Height*10))
-	} else {
-		blockNumber = "f" + strconv.Itoa((nodeId%3000)+int(req.Height*10))
-	}
-	err = bc.db.View(func(tx *bolt.Tx) error {
+	var data [][]byte
+	var lastKey string
+	lastKey = "Hash0~9"
+	log.Println("lastKEy!!!!", []byte(lastKey))
+	lastKey = ""
+	cnt := 0
+	err := bc.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
-		data = b.Get([]byte(blockNumber))
-		if data == nil {
-			log.Panic("뭐임?")
+		c := b.Cursor()
+		if c != nil {
+			// 키 공간을 역순으로 순회하여 가장 마지막 항목을 찾음
+			keyBytes, _ := c.Last()
+
+			lastKey = string(keyBytes)
+
+			targetBytes := []byte{72, 97, 115, 104}
+
+			for keyBytes != nil {
+
+				if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) {
+
+					// value의 내용을 새로운 슬라이스에 복사하여 추가 (깊은 복사)
+					value := b.Get(keyBytes)
+					valueCopy := make([]byte, len(value))
+
+					copy(valueCopy, value)
+					data[cnt] = make([]byte, len(valueCopy))
+					copy(data[cnt], valueCopy)
+					log.Println(DeserializeBlock(data[cnt]))
+					cnt++
+
+				}
+				keyBytes, _ = c.Prev() // 이전 항목으로 이동
+				lastKey = string(keyBytes)
+			}
+
 		}
+
 		return nil
 	})
 
 	checkErr(err)
 
-	respData := make([]byte, len(data))
-	copy(respData, data)
-
 	return &proto.GetShardResponse{
-		Bytes: respData,
+		Bytes: data, // 깊은 복사된 슬라이스를 반환
 	}, nil
-
 }
+
 func (s *server) DeleteMempool(ctx context.Context, req *proto.DeleteMempoolRequest) (*proto.DeleteMempoolResponse, error) {
 	log.Println("\n\n\n\nMEMPOLL SIZE", len(mempool))
 	for key := range mempool {
@@ -553,4 +596,19 @@ func convertToProtoTransaction(tx Transaction) *proto.Transaction {
 		Vin:  pbVin,
 		Vout: pbVout,
 	}
+}
+func extractNumbersFromKey(key string) (int, int) {
+	// 정규식 패턴을 사용하여 숫자를 추출
+	re := regexp.MustCompile(`hash(\d+)~(\d+)`)
+	matches := re.FindStringSubmatch(key)
+
+	if len(matches) < 3 {
+		// 매치되는 숫자가 없을 경우 오류 처리
+		log.Fatal("Could not extract numbers from key")
+	}
+
+	start, _ := strconv.Atoi(matches[1])
+	end, _ := strconv.Atoi(matches[2])
+
+	return start, end
 }

@@ -48,46 +48,57 @@ func (cli *CLI) printChain(nodeID string) {
 	count := Height / 7
 
 	blockSize := 5120 // 고정된 샤드 크기
-	for i := 0; i < Height/7; i++ {
-		count--
-		for k := 0; k < len(knownNodes); k++ {
-			data[k] = make([]byte, blockSize)
 
-			serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
+	cnt := 0
 
-			conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-			if err != nil {
-				log.Fatalf("Failed to connect to gRPC server: %v", err)
+	for k := 0; k < len(knownNodes); k++ {
+		data[k] = make([]byte, blockSize)
+
+		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
+
+		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+		if err != nil {
+			log.Fatalf("Failed to connect to gRPC server: %v", err)
+		}
+		defer conn.Close()
+
+		client := blockchain.NewBlockchainServiceClient(conn)
+		cli := CLI{
+			nodeID:     knownNodes[k][10:],
+			blockchain: client,
+		}
+		request := &blockchain.GetShardRequest{
+			NodeId: knownNodes[k][10:],
+			Height: int32(count),
+		}
+
+		response, err := cli.blockchain.GetShard(context.Background(), request)
+
+		bytes := response.Bytes
+		//log.Println(DeserializeBlock(bytes))
+		size := len(bytes)
+
+		cnt = 0
+		for j := 0; ; j++ {
+			if cnt == size {
+				break
 			}
-			defer conn.Close()
+			data[cnt*10+k] = bytes[cnt]
 
-			client := blockchain.NewBlockchainServiceClient(conn)
-			cli := CLI{
-				nodeID:     knownNodes[k][10:],
-				blockchain: client,
-			}
-			request := &blockchain.GetShardRequest{
-				NodeId: knownNodes[k][10:],
-				Height: int32(count),
-			}
+			cnt++
+		}
+	}
+	for x := 0; x < cnt*10; x++ {
 
-			response, err := cli.blockchain.GetShard(context.Background(), request)
+		var result []byte
 
-			bytes := response.Bytes
-			//log.Println(DeserializeBlock(bytes))
-			data[k] = bytes
+		for y := 0; y < len(data[x]); y++ {
+
+			result = append(result, data[x][y])
 
 		}
-		for x := 0; x < 7; x++ {
-
-			var result []byte
-
-			for y := 0; y < len(data[x]); y++ {
-
-				result = append(result, data[x][y])
-
-			}
-
+		log.Println("result:", result)
+		if x%7 >= 0 {
 			block := DeserializeBlock(result)
 			fmt.Printf("============ Block %x ============\n", block.Hash)
 			fmt.Printf("Height: %d\n", block.Height)
@@ -104,4 +115,5 @@ func (cli *CLI) printChain(nodeID string) {
 			}
 		}
 	}
+
 }

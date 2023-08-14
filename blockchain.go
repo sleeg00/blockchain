@@ -199,7 +199,7 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 	err := db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(utxoBucket))
 		c = b.Cursor()
-		log.Println("3")
+
 		for k, _ := c.First(); k != nil; k, _ = c.Next() {
 
 			if bytes.Equal(k, ID) {
@@ -236,7 +236,7 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 
 		return *resultTx, nil
 	}
-	log.Println("4")
+
 	check := Height / 7
 	for j := 0; j < Height/7; j++ {
 		check--
