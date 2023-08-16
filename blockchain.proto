@@ -136,6 +136,7 @@ message GetShardRequest{
 }
 message GetShardResponse{
   repeated bytes bytes = 1;
+  repeated int32 list = 2;
 }
 message FindChunkTransactionRequest {
   string node_id = 1;
@@ -144,6 +145,12 @@ message FindChunkTransactionRequest {
 }
 message FindChunkTransactionReponse {
   Transaction transaction = 1;
+}
+message checkZombieRequest {
+
+}
+message checkZombieResponse {
+  
 }
 service BlockchainService {
 
@@ -170,4 +177,6 @@ service BlockchainService {
   rpc GetShard(GetShardRequest) returns (GetShardResponse){}
 
   rpc FindChunkTransaction(FindChunkTransactionRequest) returns (FindChunkTransactionReponse) {}
+
+  rpc checkZombie(checkZombieRequest) returns (checkZombieResponse) {}
 }

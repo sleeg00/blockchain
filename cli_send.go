@@ -22,9 +22,11 @@ func (cli *CLI) gRPCsendBlockRequest(node_id string, block *proto.Block) []byte 
 	if err != nil {
 		fmt.Println("Error sending request to node %s: %v", node_id, err)
 
-	}
+	} else {
 
-	return response.Byte
+		return response.Byte
+	}
+	return nil
 }
 
 func (cli *CLI) requestTransaction(from, to string, amount int, node_id string, mineNow bool, transaction *proto.Transaction, node_from string) {

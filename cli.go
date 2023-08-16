@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -18,6 +19,12 @@ type CLI struct {
 	nodeID     string
 	blockchain blockchain.BlockchainServiceClient
 }
+
+var failNodes = []string{}
+var failNodesCheck int
+
+var NF int
+var f int
 
 func (cli *CLI) printUsage() {
 	fmt.Println("Usage:")
@@ -235,8 +242,7 @@ func (cli *CLI) Run() {
 	if reindexUTXOCmd.Parsed() {
 		cli.reindexUTXO(nodeID)
 	}
-	var failNodes = []string{}
-	var failNodesCheck int
+
 	if sendCmd.Parsed() {
 		if *sendFrom == "" || *sendTo == "" || *sendAmount <= 0 {
 			sendCmd.Usage()
@@ -244,7 +250,7 @@ func (cli *CLI) Run() {
 		}
 
 		if *sendMine {
-
+			failNodesCheck = 0
 			newblock := send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
 			log.Println("sendBlock")
 			//만약 블럭이 7개가 쌓였으면 인코딩한다
@@ -252,7 +258,7 @@ func (cli *CLI) Run() {
 			// 새로운 슬라이스를 만들고 txs의 값을 복사
 			var protoTransactions []*proto.Transaction
 			protoTransactions = makeClientTransactions(newblock.Transactions)
-
+			var byte []byte
 			var wg sync.WaitGroup
 			for i := 0; i < len(knownNodes); i++ {
 				wg.Add(1)
@@ -266,7 +272,7 @@ func (cli *CLI) Run() {
 						log.Println(knownNodes[i], "에 연결 실패!")
 						failNodes = append(failNodes, knownNodes[i][10:])
 						failNodesCheck++
-						log.Fatalf("Failed to connect to gRPC server: %v", err)
+
 					} else {
 						client := blockchain.NewBlockchainServiceClient(conn)
 						cli := CLI{
@@ -282,19 +288,39 @@ func (cli *CLI) Run() {
 							Nonce:         int32(newblock.Nonce),
 							Height:        int32(newblock.Height),
 						}
+						// 서버에 보낼 요청 메시지 생성
+						request := &proto.SendRequest{
+							NodeTo: knownNodes[i][10:],
+							Block:  block,
+						}
 
-						byte := cli.gRPCsendBlockRequest(knownNodes[i][10:], block)
-						newblock.PrevBlockHash = byte
+						// 서버에 요청 보내기
+						response, err := cli.blockchain.Send(context.Background(), request)
+						if err != nil {
+							log.Println(knownNodes[i], "에 연결 실패!")
+							failNodes = append(failNodes, knownNodes[i][10:])
+							failNodesCheck++
+
+						} else {
+
+							byte = response.Byte
+						}
+
+						if byte != nil {
+							newblock.PrevBlockHash = byte
+						}
 					}
 				}(i)
 			}
+
 			wg.Wait()
+			log.Println("FailNode?!", failNodesCheck)
 			invaildNodeCount := 10 - failNodesCheck
-			f := (invaildNodeCount - 1) / 3
-			NF := invaildNodeCount - f
+			f = (invaildNodeCount - 1) / 3
+			NF = invaildNodeCount - f
 			if newblock.Height%NF == 0 && newblock.Height != 0 {
 				log.Println("RsEncoding!!!!!")
-				RsEncoding(int32(newblock.Height/7), int32(f), int32(NF))
+				RsEncoding(int32(newblock.Height/NF), int32(f), int32(NF))
 			}
 			log.Println("3")
 			// Your existing code...

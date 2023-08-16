@@ -33,6 +33,7 @@ type BlockchainServiceClient interface {
 	RSEncoding(ctx context.Context, in *RSEncodingRequest, opts ...grpc.CallOption) (*RSEncodingResponse, error)
 	GetShard(ctx context.Context, in *GetShardRequest, opts ...grpc.CallOption) (*GetShardResponse, error)
 	FindChunkTransaction(ctx context.Context, in *FindChunkTransactionRequest, opts ...grpc.CallOption) (*FindChunkTransactionReponse, error)
+	CheckZombie(ctx context.Context, in *CheckZombieRequest, opts ...grpc.CallOption) (*CheckZombieResponse, error)
 }
 
 type blockchainServiceClient struct {
@@ -142,6 +143,15 @@ func (c *blockchainServiceClient) FindChunkTransaction(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *blockchainServiceClient) CheckZombie(ctx context.Context, in *CheckZombieRequest, opts ...grpc.CallOption) (*CheckZombieResponse, error) {
+	out := new(CheckZombieResponse)
+	err := c.cc.Invoke(ctx, "/blockchain.BlockchainService/checkZombie", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BlockchainServiceServer is the server API for BlockchainService service.
 // All implementations must embed UnimplementedBlockchainServiceServer
 // for forward compatibility
@@ -157,6 +167,7 @@ type BlockchainServiceServer interface {
 	RSEncoding(context.Context, *RSEncodingRequest) (*RSEncodingResponse, error)
 	GetShard(context.Context, *GetShardRequest) (*GetShardResponse, error)
 	FindChunkTransaction(context.Context, *FindChunkTransactionRequest) (*FindChunkTransactionReponse, error)
+	CheckZombie(context.Context, *CheckZombieRequest) (*CheckZombieResponse, error)
 	//mustEmbedUnimplementedBlockchainServiceServer()
 }
 
@@ -196,6 +207,9 @@ func (UnimplementedBlockchainServiceServer) GetShard(context.Context, *GetShardR
 }
 func (UnimplementedBlockchainServiceServer) FindChunkTransaction(context.Context, *FindChunkTransactionRequest) (*FindChunkTransactionReponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method FindChunkTransaction not implemented")
+}
+func (UnimplementedBlockchainServiceServer) CheckZombie(context.Context, *CheckZombieRequest) (*CheckZombieResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CheckZombie not implemented")
 }
 func (UnimplementedBlockchainServiceServer) mustEmbedUnimplementedBlockchainServiceServer() {}
 
@@ -408,6 +422,24 @@ func _BlockchainService_FindChunkTransaction_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BlockchainService_CheckZombie_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CheckZombieRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlockchainServiceServer).CheckZombie(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/blockchain.BlockchainService/checkZombie",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlockchainServiceServer).CheckZombie(ctx, req.(*CheckZombieRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BlockchainService_ServiceDesc is the grpc.ServiceDesc for BlockchainService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -458,6 +490,10 @@ var BlockchainService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "FindChunkTransaction",
 			Handler:    _BlockchainService_FindChunkTransaction_Handler,
+		},
+		{
+			MethodName: "checkZombie",
+			Handler:    _BlockchainService_CheckZombie_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

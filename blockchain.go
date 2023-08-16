@@ -237,42 +237,38 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 		return *resultTx, nil
 	}
 
-	check := Height / 7
-	for j := 0; j < Height/7; j++ {
-		check--
-		for i := 0; i < len(knownNodes)-3; i++ {
-			log.Println("KKKKK!KK!K!K!")
-			serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
+	for i := 0; i < len(knownNodes)-3; i++ {
+		log.Println("KKKKK!KK!K!K!")
+		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
 
-			conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-			if err != nil {
-				log.Fatalf("Failed to connect to gRPC server: %v", err)
-			}
-			defer conn.Close()
-			log.Println("HEIGHT", Height)
-
-			client := blockchain.NewBlockchainServiceClient(conn)
-			cli := CLI{
-				nodeID:     knownNodes[i][10:],
-				blockchain: client,
-			}
-			request := &blockchain.FindChunkTransactionRequest{
-				NodeId: knownNodes[i][10:],
-				VinId:  ID,
-				Height: int32(check),
-			}
-
-			response, err := cli.blockchain.FindChunkTransaction(context.Background(), request)
-
-			tx := response.Transaction
-			//log.Println(DeserializeBlock(bytes))
-
-			if tx != nil {
-				return convertFromProtoTransaction(tx), nil
-			}
-
+		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+		if err != nil {
+			log.Fatalf("Failed to connect to gRPC server: %v", err)
 		}
+		defer conn.Close()
+		log.Println("HEIGHT", Height)
+
+		client := blockchain.NewBlockchainServiceClient(conn)
+		cli := CLI{
+			nodeID:     knownNodes[i][10:],
+			blockchain: client,
+		}
+		request := &blockchain.FindChunkTransactionRequest{
+			NodeId: knownNodes[i][10:],
+			VinId:  ID,
+		}
+
+		response, err := cli.blockchain.FindChunkTransaction(context.Background(), request)
+
+		tx := response.Transaction
+		//log.Println(DeserializeBlock(bytes))
+
+		if tx != nil {
+			return convertFromProtoTransaction(tx), nil
+		}
+
 	}
+
 	return Transaction{}, errors.New("Transaction is not found")
 }
 

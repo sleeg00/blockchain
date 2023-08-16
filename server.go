@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"regexp"
 	"strconv"
@@ -219,6 +220,9 @@ func (s *server) SendTransaction(ctx context.Context, req *proto.SendTransaction
 	}
 	return &proto.ResponseTransaction{}, nil
 }
+func (s *server) CheckZombie(ctx context.Context, req *proto.CheckZombieRequest) (*proto.CheckZombieResponse, error) {
+	return &proto.CheckZombieResponse{}, nil
+}
 
 // 0, 1, 2,3, 4, 5, 6, -- 7!
 // 7번째 블록이 생성될 떄 RSEncoding을 진행하면 문제없이 이전 블럭 해쉬값을 알 수 있다.!!
@@ -229,7 +233,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	bc := NewBlockchain(req.NodeId)
 	defer bc.db.Close()
 	bci := bc.Iterator()
-
+	log.Println("NF: ", req.NF, "  F: ", req.F)
 	enc, err := reedsolomon.New(int(req.NF), int(req.F)) //비잔틴 장애 내성 가지도록 설계
 	checkErr(err)
 	//샤딩할 부분을 나눈다
@@ -281,27 +285,41 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 		checkErr(err)
 	}
 
-	var lastKey string
 	save := data[nodeId%3000]
 
+	end := 0
+	check := false
 	if req.Count != 0 {
 		err = bc.db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(blocksBucket))
 			c := b.Cursor()
-			log.Println(c)
 			if c != nil {
-				// 키 공간을 역순으로 순회하여 가장 마지막 항목을 찾음
 				keyBytes, _ := c.Last()
-				lastKey = string(keyBytes)
+
+				targetBytes := []byte{72, 97, 115, 104}
+				for keyBytes != nil {
+					log.Println("keyBytes ", keyBytes)
+					if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) {
+						for j := 3; j < len(keyBytes); j++ {
+							if keyBytes[j] == '~' {
+								check = true
+							} else if check {
+								m := math.Pow(10, float64(len(keyBytes)-j-1))
+								end += int(keyBytes[j]-48) * int(m)
+							}
+						}
+						log.Println("keyBytes1 ", keyBytes)
+						return nil
+					}
+					keyBytes, _ = c.Prev() // 이전 항목으로 이동
+				}
 			}
 			return nil
 		})
 		checkErr(err)
 
-		_, end := extractNumbersFromKey(lastKey)
-		end = end + 1
-		startIndex := "Hash" + strconv.Itoa(end) + "~" + strconv.Itoa(int(req.NF)+int(req.F)-1)
-
+		startIndex := "Hash" + strconv.Itoa(end+2) + "~" + strconv.Itoa(end+1+int(req.NF)+int(req.F)-1)
+		log.Println(startIndex)
 		err = bc.db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(blocksBucket))
 			b.Put([]byte(startIndex), save)
@@ -312,7 +330,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	} else {
 
 		startIndex := "Hash0~" + strconv.Itoa(int(req.NF)+(int(req.F)-1))
-		log.Println("startIndex:", startIndex)
+		log.Println("startIndex:", []byte(startIndex))
 		log.Println("save------", save)
 		err = bc.db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(blocksBucket))
@@ -329,49 +347,68 @@ func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkT
 
 	bc := NewBlockchainRead(req.NodeId)
 	defer bc.db.Close()
-	nodeId, err := strconv.Atoi(req.NodeId)
-	checkErr(err)
-	var blockNumber string
-	var data []byte
-	for i := 0; i <= int(req.Height); i++ {
-		if nodeId%3000 < 7 {
-			blockNumber = strconv.Itoa((nodeId % 3000) + int(req.Height*10))
-		} else {
-			blockNumber = "f" + strconv.Itoa((nodeId%3000)+int(req.Height*10))
-		}
-		err = bc.db.View(func(tx *bolt.Tx) error {
-			b := tx.Bucket([]byte(blocksBucket))
-			data = b.Get([]byte(blockNumber))
-			if data == nil {
-				log.Panic("뭐임?")
-			}
-			return nil
-		})
 
-		checkErr(err)
+	var data [][]byte
+	cnt := 0
+	var foundTx Transaction // 구조체 변수 선언
+	check := false
+	err := bc.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(blocksBucket))
+		c := b.Cursor()
+		if c != nil {
+			// 키 공간을 역순으로 순회하여 가장 마지막 항목을 찾음
+			keyBytes, _ := c.Last()
 
-		block := DeserializeBlock(data)
+			targetBytes := []byte{72, 97, 115, 104}
 
-		for _, tx := range block.Transactions {
-			if bytes.Equal(tx.ID, req.VinId) {
-				log.Println("TX----", tx)
+			for keyBytes != nil {
 
-				for _, tx := range block.Transactions {
-					if bytes.Equal(tx.ID, req.VinId) {
-						var foundTx Transaction // 구조체 변수 선언
-						log.Println(req.NodeId, "에서 발견")
-						foundTx = tx.TrimmedCopy() // 찾은 트랜잭션의 값을 복사하여 할당
-						return &proto.FindChunkTransactionReponse{
-							Transaction: convertToProtoTransaction(foundTx),
-						}, nil
+				if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) {
+
+					// value의 내용을 새로운 슬라이스에 복사하여 추가 (깊은 복사)
+					value := b.Get(keyBytes)
+					log.Println("value", len(value))
+
+					data = append(data, make([]byte, len(value)))
+					data[cnt] = make([]byte, len(value))
+					copy(data[cnt], value)
+
+					cnt++
+
+					block := DeserializeBlock(data[cnt-1])
+
+					for _, tx := range block.Transactions {
+						if bytes.Equal(tx.ID, req.VinId) {
+							log.Println("TX----", tx)
+
+							for _, tx := range block.Transactions {
+								if bytes.Equal(tx.ID, req.VinId) {
+									check = true
+
+									log.Println(req.NodeId, "에서 발견")
+									foundTx = tx.TrimmedCopy() // 찾은 트랜잭션의 값을 복사하여 할당
+									return nil
+								}
+							}
+
+						}
 					}
 				}
+				keyBytes, _ = c.Prev() // 이전 항목으로 이동
 
 			}
+
 		}
 
-	}
+		return nil
+	})
+	checkErr(err)
 
+	if check {
+		return &proto.FindChunkTransactionReponse{
+			Transaction: convertToProtoTransaction(foundTx),
+		}, nil
+	}
 	return &proto.FindChunkTransactionReponse{
 		Transaction: nil,
 	}, nil
@@ -386,6 +423,13 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 	log.Println("lastKEy!!!!", []byte(lastKey))
 	lastKey = ""
 	cnt := 0
+	data = make([][]byte, 1)
+	check := false
+	start := 0
+	end := 0
+	im := 2
+
+	var list []int32
 	err := bc.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		c := b.Cursor()
@@ -400,16 +444,42 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 			for keyBytes != nil {
 
 				if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) {
-
+					log.Println("keyBytes:", keyBytes)
 					// value의 내용을 새로운 슬라이스에 복사하여 추가 (깊은 복사)
 					value := b.Get(keyBytes)
-					valueCopy := make([]byte, len(value))
 
-					copy(valueCopy, value)
-					data[cnt] = make([]byte, len(valueCopy))
-					copy(data[cnt], valueCopy)
-					log.Println(DeserializeBlock(data[cnt]))
+					data = append(data, make([]byte, len(value)))
+					data[cnt] = make([]byte, len(value))
+					copy(data[cnt], value)
+
+					for i := len(keyBytes) - 1; i >= 4; i-- {
+						var keyCheck int
+						keyCheck = 0
+						log.Println(keyCheck)
+						if keyBytes[i] == '~' {
+							check = true
+							keyCheck = i
+						} else if !check {
+							log.Println("현재 KeyBytes", keyBytes)
+							m := math.Pow(10, float64(len(keyBytes)-i-1))
+							end += int(keyBytes[i]-48) * int(m)
+						} else if check {
+							log.Println("현재2 KeyBytes", keyBytes)
+							m := math.Pow(10, float64(keyCheck-1-i))
+							start += int(keyBytes[i]-48) * int(m)
+						}
+					}
+
+					list = append(list, make([]int32, 2)...)
+
+					list[im-2] = int32(start)
+					list[im-1] = int32(end)
 					cnt++
+					im += 2
+					check = false
+					start = 0
+					end = 0
+					log.Println(list)
 
 				}
 				keyBytes, _ = c.Prev() // 이전 항목으로 이동
@@ -422,9 +492,10 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 	})
 
 	checkErr(err)
-
+	log.Println(data)
 	return &proto.GetShardResponse{
 		Bytes: data, // 깊은 복사된 슬라이스를 반환
+		List:  list,
 	}, nil
 }
 
