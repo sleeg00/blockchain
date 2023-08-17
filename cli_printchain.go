@@ -80,6 +80,11 @@ func (cli *CLI) printChain(nodeID string) {
 	var failNodes = []string{}
 	var failNodesCheck int
 	var list []int32
+	enc, err := reedsolomon.New(7, 3)
+
+	log.Println("??")
+	checkErr(err)
+
 	for k := 0; k < len(knownNodes); k++ {
 
 		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
@@ -110,64 +115,69 @@ func (cli *CLI) printChain(nodeID string) {
 				failNodes = append(failNodes, knownNodes[k][10:])
 				failNodesCheck++
 				continue
-			}
-			bytes := response.Bytes
-			list = response.List
-			log.Println("list: ", list)
-			//log.Println(DeserializeBlock(bytes))
+			} else {
+				bytes := response.Bytes
+				list = response.List
 
-			size := len(bytes)
+				//log.Println(DeserializeBlock(bytes))
 
-			cnt = 0
-			for j := 0; ; j++ {
-				if cnt == size-1 {
-					break
+				size := len(bytes)
+				if k >= 7 {
+					log.Println(bytes)
 				}
-				data[cnt*10+k] = bytes[cnt]
-				log.Println("cnt:", cnt*10+k)
+				cnt = 0
+				for j := 0; ; j++ {
+					if cnt == size-1 {
+						break
+					}
+					data[cnt*10+k] = bytes[cnt]
+					cnt++
+					log.Println("k??", (cnt-1)*10+k)
 
-				cnt++
+				}
 			}
 		}
 	}
-
+	ok, err := enc.Verify(data)
+	checkErr(err)
+	log.Println(ok)
+	if ok == false {
+		return
+	}
+	err = enc.Reconstruct(data)
+	log.Println("2")
+	checkErr(err)
 	check := false
 	listCheck := len(list)
-	log.Println("1")
-	log.Println("NF", NF, "F", f)
 
-	log.Println("2")
-	restoreData := make([][]byte, len(data))
-
-	for x := 0; x < int(list[0]+list[1]); x++ {
-
+	for x := 0; x <= int(list[0]+list[1]); x++ {
+		log.Println("x", x)
+		log.Println("data", data[x])
 		var result []byte
 
-		if int(list[listCheck-1])-f+1 == x && x != 0 {
+		if int(list[listCheck-1])-f == x && x != 0 {
 			check = true
 
 		} else if list[listCheck-2]+list[listCheck-1]+1 == int32(x) {
 			check = false
 			listCheck -= 2
 		}
-
 		if !check {
 			if data[x] == nil { //복구 해야할 때
 				log.Println("XX", x)
-				enc, err := reedsolomon.New(7, 3)
+
+				checkErr(err)
 				ok, err := enc.Verify(data)
 				checkErr(err)
 				log.Println(ok)
-				err = enc.ReconstructData(data)
-				checkErr(err)
-				log.Println(restoreData[1])
 				checkErr(err)
 
-				for y := 0; y < len(restoreData[x]); y++ {
-
-					result = append(result, restoreData[x][y])
-
+				for y := 0; y < len(data[x]); y++ {
+					if data[x][y] != 0x00 {
+						result = append(result, data[x][y])
+					}
 				}
+
 				block := DeserializeBlock(result)
 				log.Println("7")
 				fmt.Printf("============ Block %x ============\n", block.Hash)
@@ -186,9 +196,12 @@ func (cli *CLI) printChain(nodeID string) {
 			} else {
 				for y := 0; y < len(data[x]); y++ {
 
-					result = append(result, data[x][y])
+					if data[x][y] != 0x00 {
+						result = append(result, data[x][y])
+					}
 
 				}
+
 				block := DeserializeBlock(result)
 				fmt.Printf("============ Block %x ============\n", block.Hash)
 				fmt.Printf("Height: %d\n", block.Height)
@@ -206,6 +219,7 @@ func (cli *CLI) printChain(nodeID string) {
 
 			}
 		}
+
 	}
 
 }

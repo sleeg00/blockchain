@@ -234,13 +234,13 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	defer bc.db.Close()
 	bci := bc.Iterator()
 	log.Println("NF: ", req.NF, "  F: ", req.F)
-	enc, err := reedsolomon.New(int(req.NF), int(req.F)) //비잔틴 장애 내성 가지도록 설계
+	enc, err := reedsolomon.New(7, 3) //비잔틴 장애 내성 가지도록 설계
 	checkErr(err)
 	//샤딩할 부분을 나눈다
 
-	data := make([][]byte, int(req.NF+req.F))
+	data := make([][]byte, int(10))
 
-	for i := 0; i < int(req.NF); i++ {
+	for i := 6; i >= 0; i-- {
 		block, err := bci.Next()
 		checkErr(err)
 		newBlockBytes := block.Serialize()
@@ -249,22 +249,29 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 		copy(data[i], newBlockBytes)
 
 		for j := len(newBlockBytes); j < 1280; j++ {
-			data[i][j] = 0x20
+			data[i][j] = 0x00
 		}
 
 	}
 
-	for i := req.NF; i < req.NF+req.F; i++ {
+	for i := 7; i < 10; i++ {
 		data[i] = make([]byte, 1280)
 	}
 
 	err = enc.Encode(data)
+
 	checkErr(err)
+	ok, err := enc.Verify(data)
+	checkErr(err)
+	log.Println("OOOKKK", ok)
+	if ok == false {
+		log.Panicln("!@#!@#!@#!@#!@#!@#!@")
+	}
 	bci = bc.Iterator()
 
 	bci.Next()
 
-	for i := 0; i < int(req.NF); i++ {
+	for i := 0; i < 7; i++ {
 		block, err := bci.Next()
 		checkErr(err)
 		err = bc.db.Update(func(tx *bolt.Tx) error {
@@ -286,7 +293,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	}
 
 	save := data[nodeId%3000]
-
+	log.Println(data)
 	end := 0
 	check := false
 	if req.Count != 0 {
@@ -340,6 +347,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 		})
 		checkErr(err)
 	}
+	log.Println(data)
 	return &blockchain.RSEncodingResponse{}, nil
 }
 
@@ -415,13 +423,13 @@ func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkT
 }
 func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*proto.GetShardResponse, error) {
 	bc := NewBlockchainRead(req.NodeId)
-	defer bc.db.Close()
+	//defer bc.db.Close()
 
 	var data [][]byte
 	var lastKey string
-	lastKey = "Hash0~9"
-	log.Println("lastKEy!!!!", []byte(lastKey))
 	lastKey = ""
+	log.Println("lastKEy!!!!", []byte(lastKey))
+
 	cnt := 0
 	data = make([][]byte, 1)
 	check := false
@@ -449,8 +457,7 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 					value := b.Get(keyBytes)
 
 					data = append(data, make([]byte, len(value)))
-					data[cnt] = make([]byte, len(value))
-					copy(data[cnt], value)
+					data[cnt] = value
 
 					for i := len(keyBytes) - 1; i >= 4; i-- {
 						var keyCheck int
@@ -492,7 +499,7 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 	})
 
 	checkErr(err)
-	log.Println(data)
+
 	return &proto.GetShardResponse{
 		Bytes: data, // 깊은 복사된 슬라이스를 반환
 		List:  list,
