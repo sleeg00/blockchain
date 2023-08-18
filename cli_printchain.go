@@ -22,35 +22,7 @@ func (cli *CLI) printChain(nodeID string) {
 	data := make([][]byte, 10)
 
 	var Height int
-	for k := 0; k < len(knownNodes); k++ {
 
-		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
-
-		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-
-		log.Println(serverAddress)
-
-		defer conn.Close()
-		client := blockchain.NewBlockchainServiceClient(conn)
-		cli := CLI{
-			nodeID:     knownNodes[k][10:],
-			blockchain: client,
-		}
-		request := &blockchain.CheckZombieRequest{}
-
-		response, err := cli.blockchain.CheckZombie(context.Background(), request)
-		log.Println(response)
-		if err != nil {
-			log.Println(knownNodes[k], "에 연결 실패!")
-			failNodes = append(failNodes, knownNodes[k][10:])
-			failNodesCheck++
-		}
-	}
-
-	log.Println("FailNode?!", failNodesCheck)
-	invaildNodeCount := 10 - failNodesCheck
-	f = (invaildNodeCount - 1) / 3
-	NF = invaildNodeCount - f
 	for x := 0; ; x++ {
 
 		block, err := bci.Next()
@@ -68,13 +40,13 @@ func (cli *CLI) printChain(nodeID string) {
 		}
 		fmt.Printf("\n\n")
 
-		if len(block.PrevBlockHash) == 0 || x == Height%NF {
+		if len(block.PrevBlockHash) == 0 || x == Height%7 {
 			log.Println("xxxxxxxx", x)
 			break
 		}
 	}
 
-	count := Height / NF
+	count := Height / 7
 
 	cnt := 0
 	var failNodes = []string{}
@@ -94,11 +66,9 @@ func (cli *CLI) printChain(nodeID string) {
 		log.Println(serverAddress)
 		if err != nil {
 			log.Println(knownNodes[k], "에 연결 실패!")
-			failNodes = append(failNodes, knownNodes[k][10:])
-			failNodesCheck++
-			continue
+
 		} else {
-			defer conn.Close()
+			//여기서 지금 멈춤
 			client := blockchain.NewBlockchainServiceClient(conn)
 			cli := CLI{
 				nodeID:     knownNodes[k][10:],
@@ -112,9 +82,7 @@ func (cli *CLI) printChain(nodeID string) {
 			response, err := cli.blockchain.GetShard(context.Background(), request)
 			if err != nil {
 				log.Println("연결실패!", knownNodes[k])
-				failNodes = append(failNodes, knownNodes[k][10:])
-				failNodesCheck++
-				continue
+
 			} else {
 				bytes := response.Bytes
 				list = response.List
@@ -122,40 +90,81 @@ func (cli *CLI) printChain(nodeID string) {
 				//log.Println(DeserializeBlock(bytes))
 
 				size := len(bytes)
-				if k >= 7 {
-					log.Println(bytes)
-				}
 				cnt = 0
+
 				for j := 0; ; j++ {
 					if cnt == size-1 {
 						break
 					}
-					data[cnt*10+k] = bytes[cnt]
+					data[cnt*10+k] = make([]byte, 2048)
+					copy(data[cnt*10+k], bytes[cnt])
+
 					cnt++
-					log.Println("k??", (cnt-1)*10+k)
 
 				}
 			}
 		}
+		defer conn.Close()
 	}
-	ok, err := enc.Verify(data)
-	checkErr(err)
-	log.Println(ok)
-	if ok == false {
-		return
+
+	log.Println(enc.Verify(data))
+	/*
+		enc.Encode(data)
+		data[4] = nil
+		enc.Reconstruct(data)
+	*/
+
+	data[4] = nil
+	enc.Reconstruct(data)
+	log.Println(enc.Verify(data))
+	for k := 0; k < len(knownNodes); k++ {
+		log.Println(len(data[k]))
+		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
+
+		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+
+		log.Println(serverAddress)
+		if err != nil {
+
+		} else {
+			defer conn.Close()
+			client := blockchain.NewBlockchainServiceClient(conn)
+			cli := CLI{
+				nodeID:     knownNodes[k][10:],
+				blockchain: client,
+			}
+			request := &blockchain.CheckRsEncodingRequest{
+				Bytes:  data,
+				NodeId: knownNodes[k][10:],
+			}
+
+			response, err := cli.blockchain.CheckRsEncoding(context.Background(), request)
+			if err != nil {
+				log.Println("연결실패!", knownNodes[k])
+				failNodes = append(failNodes, knownNodes[k][10:])
+				failNodesCheck++
+				continue
+			} else {
+				check := response.Check
+				//log.Println(DeserializeBlock(bytes))
+				if check == true {
+					log.Println(knownNodes[k], "는 값이 같다")
+				} else {
+					log.Println(knownNodes[k], "는 값 같지 않다")
+				}
+
+			}
+		}
 	}
-	err = enc.Reconstruct(data)
-	log.Println("2")
-	checkErr(err)
+
 	check := false
 	listCheck := len(list)
 
 	for x := 0; x <= int(list[0]+list[1]); x++ {
-		log.Println("x", x)
-		log.Println("data", data[x])
+
 		var result []byte
 
-		if int(list[listCheck-1])-f == x && x != 0 {
+		if int(list[listCheck-1])-3 == x && x != 0 {
 			check = true
 
 		} else if list[listCheck-2]+list[listCheck-1]+1 == int32(x) {
@@ -173,9 +182,9 @@ func (cli *CLI) printChain(nodeID string) {
 				checkErr(err)
 
 				for y := 0; y < len(data[x]); y++ {
-					if data[x][y] != 0x00 {
-						result = append(result, data[x][y])
-					}
+
+					result = append(result, data[x][y])
+
 				}
 
 				block := DeserializeBlock(result)
@@ -196,9 +205,7 @@ func (cli *CLI) printChain(nodeID string) {
 			} else {
 				for y := 0; y < len(data[x]); y++ {
 
-					if data[x][y] != 0x00 {
-						result = append(result, data[x][y])
-					}
+					result = append(result, data[x][y])
 
 				}
 

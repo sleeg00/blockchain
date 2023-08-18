@@ -318,9 +318,9 @@ func (cli *CLI) Run() {
 			invaildNodeCount := 10 - failNodesCheck
 			f = (invaildNodeCount - 1) / 3
 			NF = invaildNodeCount - f
-			if newblock.Height%NF == 0 && newblock.Height != 0 {
+			if newblock.Height%7 == 0 && newblock.Height != 0 {
 				log.Println("RsEncoding!!!!!")
-				RsEncoding(int32(newblock.Height/NF), int32(f), int32(NF))
+				RsEncoding(int32(newblock.Height/7), int32(3), int32(7))
 			}
 			log.Println("3")
 			// Your existing code...

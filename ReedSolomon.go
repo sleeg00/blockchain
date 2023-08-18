@@ -32,6 +32,7 @@ func RsEncoding(count int32, f int32, NF int32) {
 			NF:     NF,
 		})
 	}
+
 	/*
 		failNodeslist := make([]string, 10)
 		failNodesCheckCount := 0
@@ -123,6 +124,7 @@ func RsEncoding(count int32, f int32, NF int32) {
 	*/
 }
 
+/*
 func monitorNode(nodeID string) (failNodes string, failNodesCheck int32) {
 
 	serverAddress := fmt.Sprintf("localhost:%s", nodeID)
@@ -146,3 +148,4 @@ func monitorNode(nodeID string) (failNodes string, failNodesCheck int32) {
 	}
 	return "Success", 0
 }
+*/

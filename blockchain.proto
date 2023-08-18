@@ -143,6 +143,13 @@ message FindChunkTransactionRequest {
   bytes vin_id = 2;
   int32 height = 3;
 }
+message checkRsEncodingRequest {
+  repeated bytes bytes =1;
+  string node_id = 2;
+}
+message checkRsEncodingResponse {
+  bool check = 1;
+}
 message FindChunkTransactionReponse {
   Transaction transaction = 1;
 }
@@ -150,7 +157,7 @@ message checkZombieRequest {
 
 }
 message checkZombieResponse {
-  
+
 }
 service BlockchainService {
 
@@ -179,4 +186,5 @@ service BlockchainService {
   rpc FindChunkTransaction(FindChunkTransactionRequest) returns (FindChunkTransactionReponse) {}
 
   rpc checkZombie(checkZombieRequest) returns (checkZombieResponse) {}
+  rpc checkRsEncoding(checkRsEncodingRequest) returns (checkRsEncodingResponse){}
 }
