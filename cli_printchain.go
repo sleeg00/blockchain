@@ -78,22 +78,25 @@ func (cli *CLI) printChain(nodeID string) {
 				NodeId: knownNodes[k][10:],
 				Height: int32(count),
 			}
-
+			log.Println("1")
 			response, err := cli.blockchain.GetShard(context.Background(), request)
 			if err != nil {
 				log.Println("연결실패!", knownNodes[k])
 
 			} else {
+				log.Println("22")
 				bytes := response.Bytes
-				list = response.List
 
+				list = response.List
+				log.Println("2")
 				//log.Println(DeserializeBlock(bytes))
 
 				size := len(bytes)
+				log.Println("SIZE", size)
 				cnt = 0
 
 				for j := 0; ; j++ {
-					if cnt == size-1 {
+					if cnt == size {
 						break
 					}
 					data[cnt*10+k] = make([]byte, 2048)
@@ -103,22 +106,57 @@ func (cli *CLI) printChain(nodeID string) {
 
 				}
 			}
+			log.Println("3")
 		}
 		defer conn.Close()
 	}
+	for k := 0; k < len(knownNodes); k++ {
 
-	log.Println(enc.Verify(data))
-	/*
-		enc.Encode(data)
-		data[4] = nil
-		enc.Reconstruct(data)
-	*/
+		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
 
+		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+
+		log.Println(serverAddress)
+		if err != nil {
+
+		} else {
+			defer conn.Close()
+			client := blockchain.NewBlockchainServiceClient(conn)
+			cli := CLI{
+				nodeID:     knownNodes[k][10:],
+				blockchain: client,
+			}
+			request := &blockchain.CheckRsEncodingRequest{
+				Bytes:  data,
+				NodeId: knownNodes[k][10:],
+			}
+
+			response, err := cli.blockchain.CheckRsEncoding(context.Background(), request)
+			if err != nil {
+				log.Println("연결실패!", knownNodes[k])
+				failNodes = append(failNodes, knownNodes[k][10:])
+				failNodesCheck++
+				continue
+			} else {
+				check := response.Check
+				//log.Println(DeserializeBlock(bytes))
+				if check == true {
+					log.Println(knownNodes[k], "는 값이 같다")
+				} else {
+					log.Println(knownNodes[k], "는 값 같지 않다")
+				}
+
+			}
+		}
+	}
+
+	data[0] = nil
 	data[4] = nil
+
 	enc.Reconstruct(data)
 	log.Println(enc.Verify(data))
 	for k := 0; k < len(knownNodes); k++ {
-		log.Println(len(data[k]))
+
 		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
 
 		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())

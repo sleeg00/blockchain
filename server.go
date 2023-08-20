@@ -432,7 +432,7 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 	log.Println("lastKEy!!!!", []byte(lastKey))
 
 	cnt := 0
-	data = make([][]byte, 10)
+
 	check := false
 	start := 0
 	end := 0
@@ -445,22 +445,25 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 		if c != nil {
 			// 키 공간을 역순으로 순회하여 가장 마지막 항목을 찾음
 			keyBytes, _ := c.Last()
-
+			log.Println(keyBytes)
 			lastKey = string(keyBytes)
 
 			targetBytes := []byte{72, 97, 115, 104}
 
 			for keyBytes != nil {
-
+				log.Println("1")
 				if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) {
 					log.Println("keyBytes:", keyBytes)
 					// value의 내용을 새로운 슬라이스에 복사하여 추가 (깊은 복사)
 					value := b.Get(keyBytes)
-
-					data = append(data, make([]byte, len(value)))
-					data[cnt] = value
-
+					copiedValue := make([]byte, len(value))
+					copy(copiedValue, value)
+					log.Println(copiedValue)
+					data = append(data, copiedValue)
+					log.Println(data)
+					log.Println("2")
 					for i := len(keyBytes) - 1; i >= 4; i-- {
+						log.Println("3")
 						var keyCheck int
 						keyCheck = 0
 						log.Println(keyCheck)
@@ -468,6 +471,7 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 							check = true
 							keyCheck = i
 						} else if !check {
+
 							log.Println("현재 KeyBytes", keyBytes)
 							m := math.Pow(10, float64(len(keyBytes)-i-1))
 							end += int(keyBytes[i]-48) * int(m)
@@ -477,6 +481,7 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 							start += int(keyBytes[i]-48) * int(m)
 						}
 					}
+					log.Println("4")
 					log.Println("!")
 					list = append(list, make([]int32, 2)...)
 
@@ -490,8 +495,12 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 					log.Println(list)
 					log.Println("??", cnt)
 				}
-				keyBytes, _ := c.Prev()
-
+				keyBytes, _ = c.Prev()
+				if keyBytes == nil {
+					return nil
+				}
+				log.Println(keyBytes)
+				log.Println("5")
 				lastKey = string(keyBytes)
 			}
 
@@ -499,9 +508,9 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 
 		return nil
 	})
-
+	log.Println(data[0])
 	checkErr(err)
-
+	log.Println("6")
 	return &proto.GetShardResponse{
 		Bytes: data, // 깊은 복사된 슬라이스를 반환
 		List:  list,
