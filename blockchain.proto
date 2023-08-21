@@ -159,6 +159,27 @@ message checkZombieRequest {
 message checkZombieResponse {
 
 }
+
+message DataRequest {
+  repeated int32 list = 1;
+  string node_id = 2;
+}
+
+message DataResponse {
+  bool success = 1;
+}
+
+message RsReEncodingRequest {
+  int32 start =1;
+  int32 end = 2;
+  int32 NF = 3;
+  int32 F = 4;
+  string node_id = 5;
+  repeated bytes data = 6;
+}
+message RsReEncodingResponse {
+  bool success = 1;
+}
 service BlockchainService {
 
  rpc Send(SendRequest) returns (SendResponse) {}
@@ -187,4 +208,6 @@ service BlockchainService {
 
   rpc checkZombie(checkZombieRequest) returns (checkZombieResponse) {}
   rpc checkRsEncoding(checkRsEncodingRequest) returns (checkRsEncodingResponse){}
+  rpc DataTransfer(DataRequest) returns (DataResponse) {}
+  rpc RsReEncoding(RsReEncodingRequest) returns (RsReEncodingResponse) {}
 }

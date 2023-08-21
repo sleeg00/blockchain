@@ -6,12 +6,11 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/klauspost/reedsolomon"
 	blockchain "github.com/sleeg00/blockchain/proto"
 	"google.golang.org/grpc"
 )
 
-func (cli *CLI) printChain(nodeID string) {
+func printChain(nodeID string) {
 
 	bc := NewBlockchainRead(nodeID)
 
@@ -52,64 +51,59 @@ func (cli *CLI) printChain(nodeID string) {
 	var failNodes = []string{}
 	var failNodesCheck int
 	var list []int32
-	enc, err := reedsolomon.New(7, 3)
-
-	log.Println("??")
-	checkErr(err)
 
 	for k := 0; k < len(knownNodes); k++ {
 
 		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
 
 		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-
+		checkErr(err)
 		log.Println(serverAddress)
-		if err != nil {
-			log.Println(knownNodes[k], "에 연결 실패!")
-
-		} else {
-			//여기서 지금 멈춤
-			client := blockchain.NewBlockchainServiceClient(conn)
-			cli := CLI{
-				nodeID:     knownNodes[k][10:],
-				blockchain: client,
-			}
-			request := &blockchain.GetShardRequest{
-				NodeId: knownNodes[k][10:],
-				Height: int32(count),
-			}
-			log.Println("1")
-			response, err := cli.blockchain.GetShard(context.Background(), request)
-			if err != nil {
-				log.Println("연결실패!", knownNodes[k])
-
-			} else {
-				log.Println("22")
-				bytes := response.Bytes
-
-				list = response.List
-				log.Println("2")
-				//log.Println(DeserializeBlock(bytes))
-
-				size := len(bytes)
-				log.Println("SIZE", size)
-				cnt = 0
-
-				for j := 0; ; j++ {
-					if cnt == size {
-						break
-					}
-					data[cnt*10+k] = make([]byte, 2048)
-					copy(data[cnt*10+k], bytes[cnt])
-
-					cnt++
-
-				}
-			}
-			log.Println("3")
-		}
 		defer conn.Close()
+		client := blockchain.NewBlockchainServiceClient(conn)
+		cli := CLI{
+			nodeID:     knownNodes[k][10:],
+			blockchain: client,
+		}
+		log.Println(cli)
+
+		//여기서 지금 멈춤
+
+		request := &blockchain.GetShardRequest{
+			NodeId: knownNodes[k][10:],
+			Height: int32(count),
+		}
+
+		response, err := cli.blockchain.GetShard(context.Background(), request)
+		if err != nil {
+			log.Println("연결실패!", knownNodes[k])
+
+		} else {
+
+			bytes := response.Bytes
+
+			list = response.List
+
+			//log.Println(DeserializeBlock(bytes))
+
+			size := len(bytes)
+			log.Println("SIZE", size)
+			cnt = 0
+
+			for j := 0; ; j++ {
+				if cnt == size {
+					break
+				}
+				data[cnt*10+k] = bytes[cnt]
+
+				cnt++
+
+			}
+		}
+
 	}
+	log.Println("여기")
+
 	for k := 0; k < len(knownNodes); k++ {
 
 		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
@@ -117,10 +111,11 @@ func (cli *CLI) printChain(nodeID string) {
 		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
 
 		log.Println(serverAddress)
+		defer conn.Close()
 		if err != nil {
 
 		} else {
-			defer conn.Close()
+
 			client := blockchain.NewBlockchainServiceClient(conn)
 			cli := CLI{
 				nodeID:     knownNodes[k][10:],
@@ -136,7 +131,8 @@ func (cli *CLI) printChain(nodeID string) {
 				log.Println("연결실패!", knownNodes[k])
 				failNodes = append(failNodes, knownNodes[k][10:])
 				failNodesCheck++
-				continue
+				data[k] = nil
+
 			} else {
 				check := response.Check
 				//log.Println(DeserializeBlock(bytes))
@@ -150,11 +146,6 @@ func (cli *CLI) printChain(nodeID string) {
 		}
 	}
 
-	data[0] = nil
-	data[4] = nil
-
-	enc.Reconstruct(data)
-	log.Println(enc.Verify(data))
 	for k := 0; k < len(knownNodes); k++ {
 
 		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
@@ -199,7 +190,7 @@ func (cli *CLI) printChain(nodeID string) {
 	listCheck := len(list)
 
 	for x := 0; x <= int(list[0]+list[1]); x++ {
-
+		log.Println(list[0] + list[1])
 		var result []byte
 
 		if int(list[listCheck-1])-3 == x && x != 0 {
@@ -212,12 +203,6 @@ func (cli *CLI) printChain(nodeID string) {
 		if !check {
 			if data[x] == nil { //복구 해야할 때
 				log.Println("XX", x)
-
-				checkErr(err)
-				ok, err := enc.Verify(data)
-				checkErr(err)
-				log.Println(ok)
-				checkErr(err)
 
 				for y := 0; y < len(data[x]); y++ {
 

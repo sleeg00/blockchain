@@ -169,10 +169,12 @@ func (cli *CLI) Run() {
 		defer conn.Close()
 
 		client := blockchain.NewBlockchainServiceClient(conn)
+
 		cli := CLI{
 			nodeID:     nodeID,
 			blockchain: client,
 		}
+
 		cli.startNode(cli.nodeID, "")
 
 	}
@@ -236,7 +238,7 @@ func (cli *CLI) Run() {
 	}
 
 	if printChainCmd.Parsed() {
-		cli.printChain(nodeID)
+		printChain(nodeID)
 	}
 
 	if reindexUTXOCmd.Parsed() {

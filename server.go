@@ -9,9 +9,12 @@ import (
 	"log"
 	"math"
 	"net"
+	"os"
+	"os/signal"
 	"regexp"
 	"strconv"
 	"sync"
+	"syscall"
 
 	"github.com/boltdb/bolt"
 	"github.com/klauspost/reedsolomon"
@@ -26,6 +29,7 @@ const protocol = "tcp"
 const nodeVersion = 1
 const commandLength = 12
 
+var list []int32
 var RS string
 var nodeAddress string
 var miningAddress string
@@ -88,6 +92,7 @@ func nodeIsKnown(addr string) bool {
 }
 
 func StartServer(nodeID, minerAddress string) {
+	done := make(chan struct{}) // done 채널 생성
 	LocalNode := "localhost:" + nodeID
 	srv := grpc.NewServer()
 	lis, err := net.Listen("tcp", fmt.Sprintf(LocalNode))
@@ -100,9 +105,58 @@ func StartServer(nodeID, minerAddress string) {
 
 	log.Println("Server listening on localhost:", nodeID)
 
-	if err := srv.Serve(lis); err != nil {
-		log.Fatalf("Failed to serve: %v", err)
+	go func() {
+		if err := srv.Serve(lis); err != nil {
+			log.Fatalf("Failed to serve: %v", err)
+		}
+		close(done) // 서버가 종료되면 done 채널을 닫음
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM) // Ctrl + C 및 기타 종료 시그널을 처리
+
+	select {
+	case <-done:
+		// 서버가 종료될 때까지 대기
+	case sig := <-stop:
+		log.Printf("Received signal: %v", sig)
 	}
+
+	// 서버 종료 후에 로직 실행
+	log.Println("Server stopped. Executing reconnect and send request logic...")
+
+	conn, err := grpc.Dial("localhost:3010", grpc.WithInsecure())
+	if err != nil {
+		log.Printf("Failed to connect to 3010 gRPC server: %v", err)
+		return
+	}
+	defer conn.Close()
+	log.Println("0")
+	newClient := blockchain.NewBlockchainServiceClient(conn)
+
+	var list2 []int32
+	list2 = make([]int32, 2)
+	list2[0] = 0
+	list2[1] = 9
+	req := &blockchain.DataRequest{
+		List:   list2,
+		NodeId: nodeID,
+	}
+
+	res, err := newClient.DataTransfer(context.Background(), req)
+	log.Println("1")
+	if err != nil {
+		log.Printf("SendData failed: %v", err)
+		return
+	}
+	log.Println("2")
+	if res.Success {
+		log.Println("Data send successfully")
+	} else {
+		log.Println("Data send failed")
+	}
+
+	log.Println("Reconnect and send request logic executed")
 
 }
 func (s *server) CreateWallet(ctx context.Context, req *blockchain.CreateWalletRequest) (*blockchain.CreateWalletResponse, error) {
@@ -351,7 +405,195 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	log.Println(enc.Verify(data))
 	return &blockchain.RSEncodingResponse{}, nil
 }
+func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingRequest) (*proto.RsReEncodingResponse, error) {
+	log.Println("RsReEncoding")
+	nodeId, err := strconv.Atoi(req.NodeId)
+	checkErr(err)
 
+	bc := NewBlockchain(req.NodeId)
+	defer bc.db.Close()
+
+	log.Println("NF: ", req.NF, "  F: ", req.F)
+	enc, err := reedsolomon.New(7, 2) //비잔틴 장애 내성 가지도록 설계
+	checkErr(err)
+
+	var RsData [][]byte
+	RsData = make([][]byte, 9)
+	for i := 0; i <= 6; i++ {
+		RsData[i] = req.Data[i]
+	}
+	for i := 7; i < 9; i++ {
+		RsData[i] = make([]byte, 2048)
+	}
+
+	log.Println(enc.Verify(RsData))
+	enc.Encode(RsData)
+	log.Println(enc.Verify(RsData))
+
+	var start int
+	var end int
+	err = bc.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(blocksBucket))
+		c := b.Cursor()
+		if c != nil {
+			// 키 공간을 역순으로 순회하여 가장 마지막 항목을 찾음
+			keyBytes, _ := c.Last()
+			log.Println(keyBytes)
+
+			targetBytes := []byte{72, 97, 115, 104}
+			check := false
+			start = 0
+			end = 0
+			for keyBytes != nil {
+
+				if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) {
+					log.Println("keyBytes:", keyBytes)
+					// value의 내용을 새로운 슬라이스에 복사하여 추가 (깊은 복사)
+
+					for i := len(keyBytes) - 1; i >= 4; i-- {
+						var keyCheck int
+						keyCheck = 0
+						log.Println(keyCheck)
+						if keyBytes[i] == '~' {
+							check = true
+							keyCheck = i
+						} else if !check {
+							log.Println("현재 KeyBytes", keyBytes)
+							m := math.Pow(10, float64(len(keyBytes)-i-1))
+							end += int(keyBytes[i]-48) * int(m)
+						} else if check {
+							log.Println("현재2 KeyBytes", keyBytes)
+							m := math.Pow(10, float64(keyCheck-1-i))
+							start += int(keyBytes[i]-48) * int(m)
+						}
+					}
+
+					if req.Start == int32(start) && req.End == int32(end) {
+						save := RsData[nodeId%3000]
+						err = b.Delete([]byte{72, 97, 115, 104, 48, 126, 57})
+						log.Println("Hash" + (strconv.Itoa(start) + "~" + strconv.Itoa(end-1)))
+						b.Put([]byte("Hash"+(strconv.Itoa(start)+"~"+strconv.Itoa(end-1))), save)
+						log.Println("End", end)
+						return nil
+					}
+
+				}
+
+				keyBytes, _ = c.Prev()
+
+				if keyBytes == nil {
+					return nil
+				}
+
+			}
+		}
+		return nil
+	})
+	return &proto.RsReEncodingResponse{Success: true}, nil
+}
+func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*proto.DataResponse, error) {
+	cnt := 0
+	data := make([][]byte, 10)
+	enc, err := reedsolomon.New(7, 3)
+	checkErr(err)
+	for k := 0; k < len(knownNodes); k++ {
+
+		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
+
+		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+
+		log.Println(serverAddress)
+		if err != nil {
+			log.Println(knownNodes[k], "에 연결 실패!")
+
+		} else if req.NodeId != knownNodes[k][10:] {
+			//여기서 지금 멈춤
+			client := blockchain.NewBlockchainServiceClient(conn)
+			cli := CLI{
+				nodeID:     knownNodes[k][10:],
+				blockchain: client,
+			}
+
+			request := &blockchain.GetShardRequest{
+				NodeId: knownNodes[k][10:],
+				Height: int32(1),
+			}
+
+			response, err := cli.blockchain.GetShard(context.Background(), request)
+			if err != nil {
+				log.Println("연결실패!", knownNodes[k])
+				data[k] = nil
+
+			} else {
+
+				bytes := response.Bytes
+
+				list = response.List
+
+				//log.Println(DeserializeBlock(bytes))
+
+				size := len(bytes)
+				if k == 0 {
+					data = make([][]byte, size*10)
+				}
+				log.Println("SIZE", size)
+				cnt = 0
+
+				for j := 0; ; j++ {
+					if cnt == size {
+						break
+					}
+					data[cnt*10+k] = make([]byte, 2048)
+					copy(data[cnt*10+k], bytes[cnt])
+
+					cnt++
+
+				}
+			}
+			log.Println("3")
+		}
+	}
+	listCnt := 0
+
+	for k := 0; k < 1; k++ {
+		log.Println("KKK")
+		RsData := make([][]byte, len(data))
+
+		for i := req.List[listCnt]; i <= req.List[listCnt+1]; i++ {
+			RsData[i] = data[i]
+		}
+
+		log.Println("Reconstruct")
+		enc.Reconstruct(RsData)
+		log.Println(enc.Verify(RsData))
+		for j := 0; j < len(knownNodes); j++ {
+			serverAddress := fmt.Sprintf("localhost:%s", knownNodes[j][10:])
+			conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+			if err != nil {
+				log.Fatalf("Failed to connect to gRPC server: %v", err)
+			}
+			defer conn.Close()
+
+			client := blockchain.NewBlockchainServiceClient(conn)
+			cli := CLI{
+				nodeID:     knownNodes[j][10:],
+				blockchain: client,
+			}
+			log.Println("??")
+			cli.blockchain.RsReEncoding(context.Background(), &blockchain.RsReEncodingRequest{
+				NodeId: knownNodes[j][10:],
+				Start:  req.List[listCnt],
+				End:    req.List[listCnt+1],
+				F:      2,
+				NF:     7,
+				Data:   RsData,
+			})
+		}
+		listCnt++
+	}
+
+	return &proto.DataResponse{Success: true}, nil
+}
 func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkTransactionRequest) (*proto.FindChunkTransactionReponse, error) {
 
 	bc := NewBlockchainRead(req.NodeId)
@@ -438,7 +680,6 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 	end := 0
 	im := 2
 
-	var list []int32
 	err := bc.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		c := b.Cursor()

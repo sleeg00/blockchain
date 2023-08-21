@@ -35,6 +35,8 @@ type BlockchainServiceClient interface {
 	FindChunkTransaction(ctx context.Context, in *FindChunkTransactionRequest, opts ...grpc.CallOption) (*FindChunkTransactionReponse, error)
 	CheckZombie(ctx context.Context, in *CheckZombieRequest, opts ...grpc.CallOption) (*CheckZombieResponse, error)
 	CheckRsEncoding(ctx context.Context, in *CheckRsEncodingRequest, opts ...grpc.CallOption) (*CheckRsEncodingResponse, error)
+	DataTransfer(ctx context.Context, in *DataRequest, opts ...grpc.CallOption) (*DataResponse, error)
+	RsReEncoding(ctx context.Context, in *RsReEncodingRequest, opts ...grpc.CallOption) (*RsReEncodingResponse, error)
 }
 
 type blockchainServiceClient struct {
@@ -162,6 +164,24 @@ func (c *blockchainServiceClient) CheckRsEncoding(ctx context.Context, in *Check
 	return out, nil
 }
 
+func (c *blockchainServiceClient) DataTransfer(ctx context.Context, in *DataRequest, opts ...grpc.CallOption) (*DataResponse, error) {
+	out := new(DataResponse)
+	err := c.cc.Invoke(ctx, "/blockchain.BlockchainService/DataTransfer", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *blockchainServiceClient) RsReEncoding(ctx context.Context, in *RsReEncodingRequest, opts ...grpc.CallOption) (*RsReEncodingResponse, error) {
+	out := new(RsReEncodingResponse)
+	err := c.cc.Invoke(ctx, "/blockchain.BlockchainService/RsReEncoding", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BlockchainServiceServer is the server API for BlockchainService service.
 // All implementations must embed UnimplementedBlockchainServiceServer
 // for forward compatibility
@@ -179,6 +199,8 @@ type BlockchainServiceServer interface {
 	FindChunkTransaction(context.Context, *FindChunkTransactionRequest) (*FindChunkTransactionReponse, error)
 	CheckZombie(context.Context, *CheckZombieRequest) (*CheckZombieResponse, error)
 	CheckRsEncoding(context.Context, *CheckRsEncodingRequest) (*CheckRsEncodingResponse, error)
+	DataTransfer(context.Context, *DataRequest) (*DataResponse, error)
+	RsReEncoding(context.Context, *RsReEncodingRequest) (*RsReEncodingResponse, error)
 	//mustEmbedUnimplementedBlockchainServiceServer()
 }
 
@@ -224,6 +246,12 @@ func (UnimplementedBlockchainServiceServer) CheckZombie(context.Context, *CheckZ
 }
 func (UnimplementedBlockchainServiceServer) CheckRsEncoding(context.Context, *CheckRsEncodingRequest) (*CheckRsEncodingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckRsEncoding not implemented")
+}
+func (UnimplementedBlockchainServiceServer) DataTransfer(context.Context, *DataRequest) (*DataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DataTransfer not implemented")
+}
+func (UnimplementedBlockchainServiceServer) RsReEncoding(context.Context, *RsReEncodingRequest) (*RsReEncodingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RsReEncoding not implemented")
 }
 func (UnimplementedBlockchainServiceServer) mustEmbedUnimplementedBlockchainServiceServer() {}
 
@@ -472,6 +500,42 @@ func _BlockchainService_CheckRsEncoding_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BlockchainService_DataTransfer_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlockchainServiceServer).DataTransfer(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/blockchain.BlockchainService/DataTransfer",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlockchainServiceServer).DataTransfer(ctx, req.(*DataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _BlockchainService_RsReEncoding_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RsReEncodingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlockchainServiceServer).RsReEncoding(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/blockchain.BlockchainService/RsReEncoding",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlockchainServiceServer).RsReEncoding(ctx, req.(*RsReEncodingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BlockchainService_ServiceDesc is the grpc.ServiceDesc for BlockchainService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -530,6 +594,14 @@ var BlockchainService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "checkRsEncoding",
 			Handler:    _BlockchainService_CheckRsEncoding_Handler,
+		},
+		{
+			MethodName: "DataTransfer",
+			Handler:    _BlockchainService_DataTransfer_Handler,
+		},
+		{
+			MethodName: "RsReEncoding",
+			Handler:    _BlockchainService_RsReEncoding_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
