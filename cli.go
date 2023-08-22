@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"os"
 
@@ -46,45 +47,68 @@ func (cli *CLI) validateArgs() {
 	}
 }
 
+var nodeID string
+
 func main() {
 
 	cli := CLI{}
+	//cli.Run()
 
-	cli.Run()
-	/*
-			// Store the original os.Args
-		originalArgs := os.Args
+	startTime := time.Now()
 
-		for i := 0; i < 10; i++ {
-			// Modify os.Args to contain the command and its arguments
+	for k := 0; k < 9; k++ {
+		log.Println("k", k)
+		for i := 0; i < 1; i++ {
+			nodeID = "3000"
+			originalArgs := os.Args
 			os.Args = []string{
-				originalArgs[0], // The program name (e.g., "my_program")
-				"send",          // The command you want to execute
+				originalArgs[0],
+				"send",
 				"-from",
 				"12aTcP7x7PxZcqs7DbsPUS1NY8HZcaVwqV",
 				"-to",
 				"1K6BBBMDJVEjP4ZdBMNvN2jKVc2CeHTEWA",
 				"-amount",
 				"1",
-				"-mine"
+				"-mine",
 			}
 
-			// Call the Run() function to process the modified os.Args
-			cli := CLI{}
 			cli.Run()
+			os.Args = originalArgs
+		}
+		for i := 0; i < 10; i++ {
+			nodeID = "3001"
+			originalArgs := os.Args
+			os.Args = []string{
+				originalArgs[0],
+				"send",
+				"-from",
+				"1K6BBBMDJVEjP4ZdBMNvN2jKVc2CeHTEWA",
+				"-to",
+				"12aTcP7x7PxZcqs7DbsPUS1NY8HZcaVwqV",
+				"-amount",
+				"1",
+				"-mine",
+			}
+
+			cli.Run()
+			os.Args = originalArgs
 		}
 
-		// Restore the original os.Args
-		os.Args = originalArgs
-	*/
+	}
+
+	elapsedTime := time.Since(startTime)
+	fmt.Printf("Total time taken: %s\n", elapsedTime)
+
 }
 
 // Run parses command line arguments and processes commands
 func (cli *CLI) Run() {
 
-	var nodeID string
-	fmt.Println("Enter the new value of nodeID:")
-	fmt.Scanln(&nodeID)
+	/*
+		fmt.Println("Enter the new value of nodeID:")
+		fmt.Scanln(&nodeID)
+	*/
 	fmt.Printf("New nodeID: %s\n", nodeID)
 	cli.validateArgs()
 
@@ -316,15 +340,16 @@ func (cli *CLI) Run() {
 			}
 
 			wg.Wait()
-			log.Println("FailNode?!", failNodesCheck)
+
 			invaildNodeCount := 10 - failNodesCheck
 			f = (invaildNodeCount - 1) / 3
 			NF = invaildNodeCount - f
+			log.Println(newblock.Height)
 			if newblock.Height%7 == 0 && newblock.Height != 0 {
 				log.Println("RsEncoding!!!!!")
 				RsEncoding(int32(newblock.Height/7), int32(3), int32(7))
 			}
-			log.Println("3")
+
 			// Your existing code...
 
 		} else {

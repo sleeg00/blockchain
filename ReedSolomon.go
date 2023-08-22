@@ -4,35 +4,40 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 
 	blockchain "github.com/sleeg00/blockchain/proto"
 	"google.golang.org/grpc"
 )
 
 func RsEncoding(count int32, f int32, NF int32) {
-
+	var wg sync.WaitGroup
 	for i := 0; i < len(knownNodes); i++ {
-		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
-		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-		if err != nil {
-			log.Fatalf("Failed to connect to gRPC server: %v", err)
-		}
-		defer conn.Close()
+		go func(i int) {
+			serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
+			conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+			if err != nil {
+				log.Printf("Failed to connect to gRPC server: %v", err)
+				return
+			}
+			defer conn.Close()
 
-		client := blockchain.NewBlockchainServiceClient(conn)
-		cli := CLI{
-			nodeID:     knownNodes[i][10:],
-			blockchain: client,
-		}
+			client := blockchain.NewBlockchainServiceClient(conn)
+			cli := CLI{
+				nodeID:     knownNodes[i][10:],
+				blockchain: client,
+			}
 
-		cli.blockchain.RSEncoding(context.Background(), &blockchain.RSEncodingRequest{
-			NodeId: knownNodes[i][10:],
-			Count:  count - 1,
-			F:      f,
-			NF:     NF,
-		})
+			cli.blockchain.RSEncoding(context.Background(), &blockchain.RSEncodingRequest{
+				NodeId: knownNodes[i][10:],
+				Count:  count - 1,
+				F:      f,
+				NF:     NF,
+			})
+		}(i)
 	}
-
+	wg.Wait()
+	log.Println("1")
 	/*
 		failNodeslist := make([]string, 10)
 		failNodesCheckCount := 0

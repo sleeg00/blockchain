@@ -16,7 +16,7 @@ import (
 	"log"
 )
 
-const subsidy = 10
+const subsidy = 2000000
 
 // Transaction represents a Bitcoin transaction
 type Transaction struct {
@@ -223,13 +223,15 @@ func NewUTXOTransaction(wallet *Wallet, to string, amount int, UTXOSet *UTXOSet)
 	// Build a list of outputs
 	from := fmt.Sprintf("%s", wallet.GetAddress())
 	outputs = append(outputs, *NewTXOutput(amount, to))
+	log.Println("acc", acc)
+	log.Println("amount", amount)
 	if acc > amount {
 		outputs = append(outputs, *NewTXOutput(acc-amount, from)) // a change
 	}
 
 	tx := Transaction{nil, inputs, outputs}
 	tx.ID = tx.Hash()
-	log.Println(tx)
+
 	UTXOSet.Blockchain.SignTransaction(&tx, wallet.PrivateKey)
 
 	return &tx

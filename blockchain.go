@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/boltdb/bolt"
 	blockchain "github.com/sleeg00/blockchain/proto"
@@ -170,13 +171,18 @@ func (bc *Blockchain) AddBlock(block *Block) {
 func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 
 	bci := bc.Iterator()
-
 	var Height int
 	for x := 0; ; x++ {
+		log.Println(Height)
 		block, err := bci.Next()
-		if x == 0 {
-			Height = block.Height
+		if err == nil {
+
+		} else {
+			break
 		}
+		log.Println("Block", block.Height)
+		Height = block.Height
+
 		checkErr(err)
 		for _, tx := range block.Transactions {
 			if bytes.Equal(tx.ID, ID) {
@@ -184,89 +190,63 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 			}
 		}
 
-		if len(block.PrevBlockHash) == 0 || x == Height%7 {
-			log.Println("xxxxxxxx", x)
+		if len(block.PrevBlockHash) == 0 {
+
 			break
 		}
+
 	}
 
-	UTXOSet := UTXOSet{Blockchain: bc}
-	db := UTXOSet.Blockchain.db
-
-	var c *bolt.Cursor
-	var resultTx *Transaction
-
-	err := db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(utxoBucket))
-		c = b.Cursor()
-
-		for k, _ := c.First(); k != nil; k, _ = c.Next() {
-
-			if bytes.Equal(k, ID) {
-				conn, err := grpc.Dial("localhost:3000", grpc.WithInsecure())
-				if err != nil {
-					log.Fatalf("Failed to connect to gRPC server: %v", err)
-				}
-				defer conn.Close()
-
-				client := blockchain.NewBlockchainServiceClient(conn)
-
-				request := &blockchain.FindMempoolRequest{
-					NodeId:  "3000",
-					HexTxId: hex.EncodeToString(ID),
-				}
-				cli := CLI{
-					nodeID:     "3000",
-					blockchain: client,
-				}
-				response, err := cli.blockchain.FindMempool(context.Background(), request)
-				tx := convertToOneTransaction(response.Transaction)
-				resultTx = &tx
-
-			}
-		}
-
-		return nil
-	})
-
-	if err != nil {
-
-		log.Panic(err)
-	} else if resultTx.ID != nil {
-
-		return *resultTx, nil
-	}
-
+	var wg sync.WaitGroup
+	var resultx Transaction
+	check := false
 	for i := 0; i < len(knownNodes)-3; i++ {
-		log.Println("KKKKK!KK!K!K!")
-		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
 
-		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-		if err != nil {
-			log.Fatalf("Failed to connect to gRPC server: %v", err)
-		}
-		defer conn.Close()
-		log.Println("HEIGHT", Height)
+			serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
 
-		client := blockchain.NewBlockchainServiceClient(conn)
-		cli := CLI{
-			nodeID:     knownNodes[i][10:],
-			blockchain: client,
-		}
-		request := &blockchain.FindChunkTransactionRequest{
-			NodeId: knownNodes[i][10:],
-			VinId:  ID,
-		}
+			conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+			if err != nil {
+				log.Printf("Failed to connect to gRPC server: %v", err)
+				return
+			}
+			defer conn.Close()
 
-		response, err := cli.blockchain.FindChunkTransaction(context.Background(), request)
+			client := blockchain.NewBlockchainServiceClient(conn)
+			cli := CLI{
+				nodeID:     knownNodes[i][10:],
+				blockchain: client,
+			}
+			request := &blockchain.FindChunkTransactionRequest{
+				NodeId: knownNodes[i][10:],
+				VinId:  ID,
+			}
 
-		tx := response.Transaction
-		//log.Println(DeserializeBlock(bytes))
+			response, err := cli.blockchain.FindChunkTransaction(context.Background(), request)
 
-		if tx != nil {
-			return convertFromProtoTransaction(tx), nil
-		}
+			if err != nil {
+				log.Printf("Error while finding chunk transaction: %v", err)
+				return
+			}
 
+			tx := response.Transaction
+
+			if tx != nil {
+				check = true
+				resultx = convertFromProtoTransaction(tx)
+			}
+		}(i)
+	}
+
+	// 모든 고루틴이 종료될 때까지 대기
+	wg.Wait()
+
+	if check == true {
+		return resultx, nil
+	} else {
+		return Transaction{}, errors.New("Transaction is not found")
 	}
 
 	return Transaction{}, errors.New("Transaction is not found")
@@ -440,22 +420,22 @@ func (bc *Blockchain) MineBlock(transactions []*Transaction) *Block {
 
 // 트랜잭션 사인
 func (bc *Blockchain) SignTransaction(tx *Transaction, privKey ecdsa.PrivateKey) {
-	log.Println("Sign")
+
 	prevTXs := make(map[string]Transaction)
 
 	for _, vin := range tx.Vin {
 
 		prevTX, err := bc.FindTransaction(vin.Txid)
-		log.Println("prevTx: ", prevTX)
+
 		if err != nil {
 			log.Println("\n\n", vin.Txid, "가 없습니다\n")
 			log.Panic(err)
 		}
 		prevTXs[hex.EncodeToString(prevTX.ID)] = prevTX
 	}
-	log.Println("Prev")
+
 	tx.Sign(privKey, prevTXs)
-	log.Println("TX.SIGN")
+
 }
 
 // 풀노드에서 트랜잭션 not Valid 판단

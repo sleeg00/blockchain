@@ -18,7 +18,7 @@ func printChain(nodeID string) {
 
 	bci := bc.Iterator()
 
-	data := make([][]byte, 10)
+	data := make([][]byte, 20)
 
 	var Height int
 
@@ -82,14 +82,16 @@ func printChain(nodeID string) {
 
 			bytes := response.Bytes
 
-			list = response.List
+			if k == 0 {
+				list = response.List
+			}
 
 			//log.Println(DeserializeBlock(bytes))
 
 			size := len(bytes)
 			log.Println("SIZE", size)
 			cnt = 0
-
+			log.Println("List", list)
 			for j := 0; ; j++ {
 				if cnt == size {
 					break
@@ -104,6 +106,7 @@ func printChain(nodeID string) {
 	}
 	log.Println("여기")
 
+	log.Println(list)
 	for k := 0; k < len(knownNodes); k++ {
 
 		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
@@ -187,69 +190,72 @@ func printChain(nodeID string) {
 	}
 
 	check := false
-	listCheck := len(list)
+	listCheck := 4
+	for k := 0; k < 4; k += 2 {
+		for x := 0; x <= 20; x++ {
+			log.Println(list[0] + list[1])
+			var result []byte
 
-	for x := 0; x <= int(list[0]+list[1]); x++ {
-		log.Println(list[0] + list[1])
-		var result []byte
+			if x%7 == 0 && x != 0 {
+				check = true
 
-		if int(list[listCheck-1])-3 == x && x != 0 {
-			check = true
+			} else if list[listCheck-2]+list[listCheck-1]+1 == int32(x) {
 
-		} else if list[listCheck-2]+list[listCheck-1]+1 == int32(x) {
-			check = false
-			listCheck -= 2
-		}
-		if !check {
-			if data[x] == nil { //복구 해야할 때
-				log.Println("XX", x)
-
-				for y := 0; y < len(data[x]); y++ {
-
-					result = append(result, data[x][y])
-
-				}
-
-				block := DeserializeBlock(result)
-				log.Println("7")
-				fmt.Printf("============ Block %x ============\n", block.Hash)
-				fmt.Printf("Height: %d\n", block.Height)
-				fmt.Printf("Prev. block: %x\n", block.PrevBlockHash)
-				pow := NewProofOfWork(block)
-				fmt.Printf("PoW: %s\n\n", strconv.FormatBool(pow.Validate()))
-				for _, tx := range block.Transactions {
-					fmt.Println(tx)
-				}
-				fmt.Printf("\n\n")
-
-				if len(block.PrevBlockHash) == 0 {
-					break
-				}
-			} else {
-				for y := 0; y < len(data[x]); y++ {
-
-					result = append(result, data[x][y])
-
-				}
-
-				block := DeserializeBlock(result)
-				fmt.Printf("============ Block %x ============\n", block.Hash)
-				fmt.Printf("Height: %d\n", block.Height)
-				fmt.Printf("Prev. block: %x\n", block.PrevBlockHash)
-				pow := NewProofOfWork(block)
-				fmt.Printf("PoW: %s\n\n", strconv.FormatBool(pow.Validate()))
-				for _, tx := range block.Transactions {
-					fmt.Println(tx)
-				}
-				fmt.Printf("\n\n")
-
-				if len(block.PrevBlockHash) == 0 {
-					break
-				}
-
+				check = false
+				listCheck -= 2
 			}
+			log.Println(x)
+			if !check && x != 9 {
+				if data[x] == nil { //복구 해야할 때
+					log.Println("XX", x)
+
+					for y := 0; y < len(data[x]); y++ {
+						result = append(result, data[x][y])
+					}
+
+					block := DeserializeBlock(result)
+					log.Println("7")
+					fmt.Printf("============ Block %x ============\n", block.Hash)
+					fmt.Printf("Height: %d\n", block.Height)
+					fmt.Printf("Prev. block: %x\n", block.PrevBlockHash)
+					pow := NewProofOfWork(block)
+					fmt.Printf("PoW: %s\n\n", strconv.FormatBool(pow.Validate()))
+
+					for _, tx := range block.Transactions {
+						fmt.Println(tx)
+					}
+
+					fmt.Printf("\n\n")
+
+					if len(block.PrevBlockHash) == 0 {
+						break
+					}
+
+				} else {
+					for y := 0; y < len(data[x]); y++ {
+
+						result = append(result, data[x][y])
+
+					}
+
+					block := DeserializeBlock(result)
+					fmt.Printf("============ Block %x ============\n", block.Hash)
+					fmt.Printf("Height: %d\n", block.Height)
+					fmt.Printf("Prev. block: %x\n", block.PrevBlockHash)
+					pow := NewProofOfWork(block)
+					fmt.Printf("PoW: %s\n\n", strconv.FormatBool(pow.Validate()))
+					for _, tx := range block.Transactions {
+						fmt.Println(tx)
+					}
+					fmt.Printf("\n\n")
+
+					if len(block.PrevBlockHash) == 0 {
+						break
+					}
+
+				}
+			}
+
 		}
-
 	}
-
 }

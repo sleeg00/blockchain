@@ -137,7 +137,7 @@ func StartServer(nodeID, minerAddress string) {
 	var list2 []int32
 	list2 = make([]int32, 2)
 	list2[0] = 0
-	list2[1] = 9
+	list2[1] = 8
 	req := &blockchain.DataRequest{
 		List:   list2,
 		NodeId: nodeID,
@@ -281,13 +281,14 @@ func (s *server) CheckZombie(ctx context.Context, req *proto.CheckZombieRequest)
 // 0, 1, 2,3, 4, 5, 6, -- 7!
 // 7번째 블록이 생성될 떄 RSEncoding을 진행하면 문제없이 이전 블럭 해쉬값을 알 수 있다.!!
 func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (*proto.RSEncodingResponse, error) {
+	log.Println("RSEncoding")
 	nodeId, err := strconv.Atoi(req.NodeId)
 	checkErr(err)
 
 	bc := NewBlockchain(req.NodeId)
 	defer bc.db.Close()
 	bci := bc.Iterator()
-	log.Println("NF: ", req.NF, "  F: ", req.F)
+
 	enc, err := reedsolomon.New(7, 3) //비잔틴 장애 내성 가지도록 설계
 	checkErr(err)
 	//샤딩할 부분을 나눈다
@@ -313,16 +314,15 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	checkErr(err)
 	ok, err := enc.Verify(data)
 	checkErr(err)
-	log.Println("OOOKKK", ok)
+
 	if ok == false {
 		log.Panicln("!@#!@#!@#!@#!@#!@#!@")
 	}
 	bci = bc.Iterator()
 
-	bci.Next()
-
 	for i := 0; i < 7; i++ {
 		block, err := bci.Next()
+
 		checkErr(err)
 		err = bc.db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(blocksBucket))
@@ -343,7 +343,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	}
 
 	save := data[nodeId%3000]
-	log.Println(data)
+
 	end := 0
 	check := false
 	if req.Count != 0 {
@@ -355,7 +355,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 
 				targetBytes := []byte{72, 97, 115, 104}
 				for keyBytes != nil {
-					log.Println("keyBytes ", keyBytes)
+
 					if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) {
 						for j := 3; j < len(keyBytes); j++ {
 							if keyBytes[j] == '~' {
@@ -365,7 +365,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 								end += int(keyBytes[j]-48) * int(m)
 							}
 						}
-						log.Println("keyBytes1 ", keyBytes)
+
 						return nil
 					}
 					keyBytes, _ = c.Prev() // 이전 항목으로 이동
@@ -376,7 +376,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 		checkErr(err)
 
 		startIndex := "Hash" + strconv.Itoa(end+2) + "~" + strconv.Itoa(end+1+int(req.NF)+int(req.F)-1)
-		log.Println(startIndex)
+
 		err = bc.db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(blocksBucket))
 			b.Put([]byte(startIndex), save)
@@ -387,8 +387,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	} else {
 
 		startIndex := "Hash0~" + strconv.Itoa(9)
-		log.Println("startIndex:", []byte(startIndex))
-		log.Println("save------", save)
+
 		err = bc.db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(blocksBucket))
 			b.Put([]byte(startIndex), save)
@@ -397,12 +396,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 		})
 		checkErr(err)
 	}
-	for i := 0; i < 10; i++ {
-		log.Println(i, "번 째 ")
-		log.Println(data[i])
-	}
 
-	log.Println(enc.Verify(data))
 	return &blockchain.RSEncodingResponse{}, nil
 }
 func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingRequest) (*proto.RsReEncodingResponse, error) {
@@ -432,7 +426,7 @@ func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingReques
 
 	var start int
 	var end int
-	err = bc.db.View(func(tx *bolt.Tx) error {
+	err = bc.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		c := b.Cursor()
 		if c != nil {
@@ -469,11 +463,17 @@ func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingReques
 					}
 
 					if req.Start == int32(start) && req.End == int32(end) {
-						save := RsData[nodeId%3000]
+
 						err = b.Delete([]byte{72, 97, 115, 104, 48, 126, 57})
-						log.Println("Hash" + (strconv.Itoa(start) + "~" + strconv.Itoa(end-1)))
-						b.Put([]byte("Hash"+(strconv.Itoa(start)+"~"+strconv.Itoa(end-1))), save)
-						log.Println("End", end)
+						checkErr(err)
+						if nodeId%3000 < 9 {
+							log.Println("Hash" + (strconv.Itoa(start) + "~" + strconv.Itoa(end-1)))
+							save := RsData[nodeId%3000]
+							b.Put([]byte("Hash"+(strconv.Itoa(start)+"~"+strconv.Itoa(end-1))), save)
+
+							log.Println("End", end)
+						}
+
 						return nil
 					}
 
@@ -496,6 +496,7 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 	data := make([][]byte, 10)
 	enc, err := reedsolomon.New(7, 3)
 	checkErr(err)
+
 	for k := 0; k < len(knownNodes); k++ {
 
 		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
@@ -557,9 +558,10 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 
 	for k := 0; k < 1; k++ {
 		log.Println("KKK")
+		log.Println(list)
 		RsData := make([][]byte, len(data))
 
-		for i := req.List[listCnt]; i <= req.List[listCnt+1]; i++ {
+		for i := list[listCnt]; i <= list[listCnt+1]; i++ {
 			RsData[i] = data[i]
 		}
 
@@ -567,8 +569,10 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 		enc.Reconstruct(RsData)
 		log.Println(enc.Verify(RsData))
 		for j := 0; j < len(knownNodes); j++ {
+
 			serverAddress := fmt.Sprintf("localhost:%s", knownNodes[j][10:])
 			conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+
 			if err != nil {
 				log.Fatalf("Failed to connect to gRPC server: %v", err)
 			}
@@ -579,11 +583,11 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 				nodeID:     knownNodes[j][10:],
 				blockchain: client,
 			}
-			log.Println("??")
+
 			cli.blockchain.RsReEncoding(context.Background(), &blockchain.RsReEncodingRequest{
 				NodeId: knownNodes[j][10:],
-				Start:  req.List[listCnt],
-				End:    req.List[listCnt+1],
+				Start:  0,
+				End:    9,
 				F:      2,
 				NF:     7,
 				Data:   RsData,
@@ -618,7 +622,6 @@ func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkT
 
 					// value의 내용을 새로운 슬라이스에 복사하여 추가 (깊은 복사)
 					value := b.Get(keyBytes)
-					log.Println("value", len(value))
 
 					data = append(data, make([]byte, len(value)))
 					data[cnt] = make([]byte, len(value))
@@ -728,6 +731,7 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 
 					list[im-2] = int32(start)
 					list[im-1] = int32(end)
+
 					cnt++
 					im += 2
 					check = false

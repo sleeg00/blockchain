@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/boltdb/bolt"
 )
@@ -16,17 +16,24 @@ type BlockchainIterator struct {
 func (i *BlockchainIterator) Next() (*Block, error) {
 
 	var block *Block
-	fmt.Println(i.currentHash)
+	var encodedBlock []byte
+
 	err := i.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
-		encodedBlock := b.Get(i.currentHash)
+		encodedBlock = b.Get(i.currentHash)
+
+		if !(len(encodedBlock) > 0) {
+
+			return errors.New("fail")
+		}
 		block = DeserializeBlock(encodedBlock)
 
 		return nil
 	})
 
 	if err != nil {
-		return block, err
+
+		return block, errors.New("fail")
 	}
 
 	i.currentHash = block.PrevBlockHash

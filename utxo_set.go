@@ -16,7 +16,7 @@ type UTXOSet struct {
 
 // FindSpendableOutputs finds and returns unspent outputs to reference in inputs
 func (u UTXOSet) FindSpendableOutputs(pubkeyHash []byte, amount int) (int, map[string][]int) {
-	log.Println("FindSpend")
+
 	unspentOutputs := make(map[string][]int)
 	accumulated := 0
 	db := u.Blockchain.db
