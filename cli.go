@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
 
 	"os"
 
@@ -52,63 +51,47 @@ var nodeID string
 func main() {
 
 	cli := CLI{}
-	//cli.Run()
 
-	startTime := time.Now()
+	fmt.Println("Enter the new value of nodeID:")
+	fmt.Scanln(&nodeID)
 
-	for k := 0; k < 9; k++ {
-		log.Println("k", k)
-		for i := 0; i < 1; i++ {
-			nodeID = "3000"
-			originalArgs := os.Args
-			os.Args = []string{
-				originalArgs[0],
-				"send",
-				"-from",
-				"12aTcP7x7PxZcqs7DbsPUS1NY8HZcaVwqV",
-				"-to",
-				"1K6BBBMDJVEjP4ZdBMNvN2jKVc2CeHTEWA",
-				"-amount",
-				"1",
-				"-mine",
+	cli.Run()
+
+	/*
+
+		startTime := time.Now()
+
+		for k := 0; k < 10; k++ {
+			log.Println("k", k)
+			for i := 0; i < 10; i++ {
+				nodeID = "3000"
+				originalArgs := os.Args
+				os.Args = []string{
+					originalArgs[0],
+					"send",
+					"-from",
+					"12aTcP7x7PxZcqs7DbsPUS1NY8HZcaVwqV",
+					"-to",
+					"1K6BBBMDJVEjP4ZdBMNvN2jKVc2CeHTEWA",
+					"-amount",
+					"1",
+					"-mine",
+				}
+
+				cli.Run()
+				os.Args = originalArgs
 			}
 
-			cli.Run()
-			os.Args = originalArgs
-		}
-		for i := 0; i < 10; i++ {
-			nodeID = "3001"
-			originalArgs := os.Args
-			os.Args = []string{
-				originalArgs[0],
-				"send",
-				"-from",
-				"1K6BBBMDJVEjP4ZdBMNvN2jKVc2CeHTEWA",
-				"-to",
-				"12aTcP7x7PxZcqs7DbsPUS1NY8HZcaVwqV",
-				"-amount",
-				"1",
-				"-mine",
-			}
-
-			cli.Run()
-			os.Args = originalArgs
 		}
 
-	}
-
-	elapsedTime := time.Since(startTime)
-	fmt.Printf("Total time taken: %s\n", elapsedTime)
-
+		elapsedTime := time.Since(startTime)
+		fmt.Printf("Total time taken: %s\n", elapsedTime)
+	*/
 }
 
 // Run parses command line arguments and processes commands
 func (cli *CLI) Run() {
 
-	/*
-		fmt.Println("Enter the new value of nodeID:")
-		fmt.Scanln(&nodeID)
-	*/
 	fmt.Printf("New nodeID: %s\n", nodeID)
 	cli.validateArgs()
 

@@ -11,6 +11,7 @@ import (
 )
 
 func RsEncoding(count int32, f int32, NF int32) {
+	log.Println("RS")
 	var wg sync.WaitGroup
 	for i := 0; i < len(knownNodes); i++ {
 		go func(i int) {

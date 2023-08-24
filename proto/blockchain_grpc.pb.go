@@ -37,6 +37,7 @@ type BlockchainServiceClient interface {
 	CheckRsEncoding(ctx context.Context, in *CheckRsEncodingRequest, opts ...grpc.CallOption) (*CheckRsEncodingResponse, error)
 	DataTransfer(ctx context.Context, in *DataRequest, opts ...grpc.CallOption) (*DataResponse, error)
 	RsReEncoding(ctx context.Context, in *RsReEncodingRequest, opts ...grpc.CallOption) (*RsReEncodingResponse, error)
+	GetOneShard(ctx context.Context, in *GetOneShardRequest, opts ...grpc.CallOption) (*GetOneShardResponse, error)
 }
 
 type blockchainServiceClient struct {
@@ -182,6 +183,15 @@ func (c *blockchainServiceClient) RsReEncoding(ctx context.Context, in *RsReEnco
 	return out, nil
 }
 
+func (c *blockchainServiceClient) GetOneShard(ctx context.Context, in *GetOneShardRequest, opts ...grpc.CallOption) (*GetOneShardResponse, error) {
+	out := new(GetOneShardResponse)
+	err := c.cc.Invoke(ctx, "/blockchain.BlockchainService/GetOneShard", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BlockchainServiceServer is the server API for BlockchainService service.
 // All implementations must embed UnimplementedBlockchainServiceServer
 // for forward compatibility
@@ -201,6 +211,7 @@ type BlockchainServiceServer interface {
 	CheckRsEncoding(context.Context, *CheckRsEncodingRequest) (*CheckRsEncodingResponse, error)
 	DataTransfer(context.Context, *DataRequest) (*DataResponse, error)
 	RsReEncoding(context.Context, *RsReEncodingRequest) (*RsReEncodingResponse, error)
+	GetOneShard(context.Context, *GetOneShardRequest) (*GetOneShardResponse, error)
 	//mustEmbedUnimplementedBlockchainServiceServer()
 }
 
@@ -252,6 +263,9 @@ func (UnimplementedBlockchainServiceServer) DataTransfer(context.Context, *DataR
 }
 func (UnimplementedBlockchainServiceServer) RsReEncoding(context.Context, *RsReEncodingRequest) (*RsReEncodingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RsReEncoding not implemented")
+}
+func (UnimplementedBlockchainServiceServer) GetOneShard(context.Context, *GetOneShardRequest) (*GetOneShardResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetOneShard not implemented")
 }
 func (UnimplementedBlockchainServiceServer) mustEmbedUnimplementedBlockchainServiceServer() {}
 
@@ -536,6 +550,24 @@ func _BlockchainService_RsReEncoding_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _BlockchainService_GetOneShard_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetOneShardRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BlockchainServiceServer).GetOneShard(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/blockchain.BlockchainService/GetOneShard",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BlockchainServiceServer).GetOneShard(ctx, req.(*GetOneShardRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // BlockchainService_ServiceDesc is the grpc.ServiceDesc for BlockchainService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -602,6 +634,10 @@ var BlockchainService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RsReEncoding",
 			Handler:    _BlockchainService_RsReEncoding_Handler,
+		},
+		{
+			MethodName: "GetOneShard",
+			Handler:    _BlockchainService_GetOneShard_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

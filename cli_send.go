@@ -88,7 +88,7 @@ func send(from, to string, amount int, node_id string, mineNow bool) Block {
 		block := DeserializeBlock(blockData)
 
 		lastHeight = block.Height
-
+		log.Println("lastHeight", lastHeight)
 		return nil
 	})
 	if err != nil {

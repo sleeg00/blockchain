@@ -25,6 +25,9 @@ func printChain(nodeID string) {
 	for x := 0; ; x++ {
 
 		block, err := bci.Next()
+		if err != nil {
+			break
+		}
 		if x == 0 {
 			Height = block.Height
 		}
@@ -48,8 +51,7 @@ func printChain(nodeID string) {
 	count := Height / 7
 
 	cnt := 0
-	var failNodes = []string{}
-	var failNodesCheck int
+
 	var list []int32
 
 	for k := 0; k < len(knownNodes); k++ {
@@ -107,87 +109,6 @@ func printChain(nodeID string) {
 	log.Println("여기")
 
 	log.Println(list)
-	for k := 0; k < len(knownNodes); k++ {
-
-		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
-
-		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-
-		log.Println(serverAddress)
-		defer conn.Close()
-		if err != nil {
-
-		} else {
-
-			client := blockchain.NewBlockchainServiceClient(conn)
-			cli := CLI{
-				nodeID:     knownNodes[k][10:],
-				blockchain: client,
-			}
-			request := &blockchain.CheckRsEncodingRequest{
-				Bytes:  data,
-				NodeId: knownNodes[k][10:],
-			}
-
-			response, err := cli.blockchain.CheckRsEncoding(context.Background(), request)
-			if err != nil {
-				log.Println("연결실패!", knownNodes[k])
-				failNodes = append(failNodes, knownNodes[k][10:])
-				failNodesCheck++
-				data[k] = nil
-
-			} else {
-				check := response.Check
-				//log.Println(DeserializeBlock(bytes))
-				if check == true {
-					log.Println(knownNodes[k], "는 값이 같다")
-				} else {
-					log.Println(knownNodes[k], "는 값 같지 않다")
-				}
-
-			}
-		}
-	}
-
-	for k := 0; k < len(knownNodes); k++ {
-
-		serverAddress := fmt.Sprintf("localhost:%s", knownNodes[k][10:])
-
-		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-
-		log.Println(serverAddress)
-		if err != nil {
-
-		} else {
-			defer conn.Close()
-			client := blockchain.NewBlockchainServiceClient(conn)
-			cli := CLI{
-				nodeID:     knownNodes[k][10:],
-				blockchain: client,
-			}
-			request := &blockchain.CheckRsEncodingRequest{
-				Bytes:  data,
-				NodeId: knownNodes[k][10:],
-			}
-
-			response, err := cli.blockchain.CheckRsEncoding(context.Background(), request)
-			if err != nil {
-				log.Println("연결실패!", knownNodes[k])
-				failNodes = append(failNodes, knownNodes[k][10:])
-				failNodesCheck++
-				continue
-			} else {
-				check := response.Check
-				//log.Println(DeserializeBlock(bytes))
-				if check == true {
-					log.Println(knownNodes[k], "는 값이 같다")
-				} else {
-					log.Println(knownNodes[k], "는 값 같지 않다")
-				}
-
-			}
-		}
-	}
 
 	check := false
 	listCheck := 4

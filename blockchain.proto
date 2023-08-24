@@ -180,6 +180,14 @@ message RsReEncodingRequest {
 message RsReEncodingResponse {
   bool success = 1;
 }
+message GetOneShardRequest {
+    int32 start = 1;
+    int32 end = 2;
+    string node_id = 3;
+}
+message GetOneShardResponse{
+  bytes data = 1;
+}
 service BlockchainService {
 
  rpc Send(SendRequest) returns (SendResponse) {}
@@ -210,4 +218,5 @@ service BlockchainService {
   rpc checkRsEncoding(checkRsEncodingRequest) returns (checkRsEncodingResponse){}
   rpc DataTransfer(DataRequest) returns (DataResponse) {}
   rpc RsReEncoding(RsReEncodingRequest) returns (RsReEncodingResponse) {}
+  rpc GetOneShard(GetOneShardRequest) returns (GetOneShardResponse){}
 }

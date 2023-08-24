@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"encoding/gob"
@@ -144,33 +145,41 @@ func (tx *Transaction) Verify(prevTXs map[string]Transaction) bool {
 
 	txCopy := tx.TrimmedCopy()
 	curve := elliptic.P256()
-
+	check := false
+	var wg sync.WaitGroup
 	for inID, vin := range tx.Vin {
-		prevTx := prevTXs[hex.EncodeToString(vin.Txid)]
-		txCopy.Vin[inID].Signature = nil
-		txCopy.Vin[inID].PubKey = prevTx.Vout[vin.Vout].PubKeyHash
+		wg.Add(1)
+		go func(inID int, vin TXInput) {
+			defer wg.Done()
 
-		r := big.Int{}
-		s := big.Int{}
-		sigLen := len(vin.Signature)
-		r.SetBytes(vin.Signature[:(sigLen / 2)])
-		s.SetBytes(vin.Signature[(sigLen / 2):])
+			prevTx := prevTXs[hex.EncodeToString(vin.Txid)]
+			txCopy.Vin[inID].Signature = nil
+			txCopy.Vin[inID].PubKey = prevTx.Vout[vin.Vout].PubKeyHash
 
-		x := big.Int{}
-		y := big.Int{}
-		keyLen := len(vin.PubKey)
-		x.SetBytes(vin.PubKey[:(keyLen / 2)])
-		y.SetBytes(vin.PubKey[(keyLen / 2):])
+			r := big.Int{}
+			s := big.Int{}
+			sigLen := len(vin.Signature)
+			r.SetBytes(vin.Signature[:(sigLen / 2)])
+			s.SetBytes(vin.Signature[(sigLen / 2):])
 
-		dataToVerify := fmt.Sprintf("%x\n", txCopy)
+			x := big.Int{}
+			y := big.Int{}
+			keyLen := len(vin.PubKey)
+			x.SetBytes(vin.PubKey[:(keyLen / 2)])
+			y.SetBytes(vin.PubKey[(keyLen / 2):])
 
-		rawPubKey := ecdsa.PublicKey{Curve: curve, X: &x, Y: &y}
-		if ecdsa.Verify(&rawPubKey, []byte(dataToVerify), &r, &s) == false {
-			return false
-		}
-		txCopy.Vin[inID].PubKey = nil
+			dataToVerify := fmt.Sprintf("%x\n", txCopy)
+
+			rawPubKey := ecdsa.PublicKey{Curve: curve, X: &x, Y: &y}
+			if ecdsa.Verify(&rawPubKey, []byte(dataToVerify), &r, &s) == false {
+				check = true
+			}
+			txCopy.Vin[inID].PubKey = nil
+		}(inID, vin)
 	}
-
+	if check == true {
+		return false
+	}
 	return true
 }
 

@@ -175,12 +175,10 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 	for x := 0; ; x++ {
 		log.Println(Height)
 		block, err := bci.Next()
-		if err == nil {
-
-		} else {
+		if err != nil {
 			break
 		}
-		log.Println("Block", block.Height)
+		log.Println("Block Height는? ", block.Height)
 		Height = block.Height
 
 		checkErr(err)
@@ -200,49 +198,53 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 	var wg sync.WaitGroup
 	var resultx Transaction
 	check := false
-	for i := 0; i < len(knownNodes)-3; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
+	for {
+		for i := 0; i < len(knownNodes)-3; i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
 
-			serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
+				serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
 
-			conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-			if err != nil {
-				log.Printf("Failed to connect to gRPC server: %v", err)
-				return
-			}
-			defer conn.Close()
+				conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+				if err != nil {
+					log.Printf("Failed to connect to gRPC server: %v", err)
+					return
+				}
+				defer conn.Close()
 
-			client := blockchain.NewBlockchainServiceClient(conn)
-			cli := CLI{
-				nodeID:     knownNodes[i][10:],
-				blockchain: client,
-			}
-			request := &blockchain.FindChunkTransactionRequest{
-				NodeId: knownNodes[i][10:],
-				VinId:  ID,
-			}
+				client := blockchain.NewBlockchainServiceClient(conn)
+				cli := CLI{
+					nodeID:     knownNodes[i][10:],
+					blockchain: client,
+				}
+				request := &blockchain.FindChunkTransactionRequest{
+					NodeId: knownNodes[i][10:],
+					VinId:  ID,
+				}
 
-			response, err := cli.blockchain.FindChunkTransaction(context.Background(), request)
+				response, err := cli.blockchain.FindChunkTransaction(context.Background(), request)
 
-			if err != nil {
-				log.Printf("Error while finding chunk transaction: %v", err)
-				return
-			}
+				if err != nil {
+					log.Printf("Error while finding chunk transaction: %v", err)
+					return
+				}
 
-			tx := response.Transaction
+				tx := response.Transaction
 
-			if tx != nil {
-				check = true
-				resultx = convertFromProtoTransaction(tx)
-			}
-		}(i)
+				if tx != nil {
+					check = true
+					resultx = convertFromProtoTransaction(tx)
+				}
+			}(i)
+		}
+
+		// 모든 고루틴이 종료될 때까지 대기
+		wg.Wait()
+		if check == true {
+			break
+		}
 	}
-
-	// 모든 고루틴이 종료될 때까지 대기
-	wg.Wait()
-
 	if check == true {
 		return resultx, nil
 	} else {

@@ -284,7 +284,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	log.Println("RSEncoding")
 	nodeId, err := strconv.Atoi(req.NodeId)
 	checkErr(err)
-
+	var checkList []int
 	bc := NewBlockchain(req.NodeId)
 	defer bc.db.Close()
 	bci := bc.Iterator()
@@ -294,15 +294,18 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	//샤딩할 부분을 나눈다
 
 	data := make([][]byte, int(10))
+	bci.Next() //7
 
 	for i := 6; i >= 0; i-- {
-		block, err := bci.Next()
+		block, err := bci.Next() //6
 		checkErr(err)
+
+		log.Println("RSEncoding Block Height", block.Height)
 		newBlockBytes := block.Serialize()
 		// 비어있는 곳을 0으로 채운 후, newBlockBytes의 내용을 복사합니다
 		data[i] = make([]byte, 2048)
 		copy(data[i], newBlockBytes)
-
+		checkList = append(checkList, block.Height)
 	}
 
 	for i := 7; i < 10; i++ {
@@ -321,25 +324,29 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	bci = bc.Iterator()
 
 	for i := 0; i < 7; i++ {
-		block, err := bci.Next()
+		block, err := bci.Next() //6
 
 		checkErr(err)
-		err = bc.db.Update(func(tx *bolt.Tx) error {
-			b := tx.Bucket([]byte(blocksBucket))
-			blockInDb := b.Get(block.Hash)
+		if block.Height == checkList[i] {
+			err = bc.db.Update(func(tx *bolt.Tx) error {
+				b := tx.Bucket([]byte(blocksBucket))
+				blockInDb := b.Get(block.Hash)
 
-			if blockInDb == nil {
+				if blockInDb == nil {
+					return nil
+				}
+				log.Println("삭제한 블럭 Height", DeserializeBlock(blockInDb).Height)
+				err := b.Delete(block.Hash)
+
+				if err != nil {
+					log.Panic(err)
+				}
+
+				checkErr(err)
 				return nil
-			}
-
-			err := b.Delete(block.Hash)
-			if err != nil {
-				log.Panic(err)
-			}
-
-			return nil
-		})
-		checkErr(err)
+			})
+			checkErr(err)
+		}
 	}
 
 	save := data[nodeId%3000]
@@ -357,12 +364,19 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 				for keyBytes != nil {
 
 					if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) {
-						for j := 3; j < len(keyBytes); j++ {
-							if keyBytes[j] == '~' {
+						var keyCheck int
+						keyCheck = 0
+						log.Println(keyCheck)
+						for i := len(keyBytes) - 1; i >= 4; i-- {
+
+							if keyBytes[i] == '~' {
 								check = true
-							} else if check {
-								m := math.Pow(10, float64(len(keyBytes)-j-1))
-								end += int(keyBytes[j]-48) * int(m)
+								keyCheck = i
+							} else if !check {
+
+								log.Println("현재 KeyBytes", string(keyBytes))
+								m := math.Pow(10, float64(len(keyBytes)-i-1))
+								end += int(keyBytes[i]-48) * int(m)
 							}
 						}
 
@@ -375,7 +389,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 		})
 		checkErr(err)
 
-		startIndex := "Hash" + strconv.Itoa(end+2) + "~" + strconv.Itoa(end+1+int(req.NF)+int(req.F)-1)
+		startIndex := "Hash" + strconv.Itoa(end+1) + "~" + strconv.Itoa(end+int(req.NF)+int(req.F))
 
 		err = bc.db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(blocksBucket))
@@ -441,22 +455,22 @@ func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingReques
 			for keyBytes != nil {
 
 				if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) {
-					log.Println("keyBytes:", keyBytes)
+
 					// value의 내용을 새로운 슬라이스에 복사하여 추가 (깊은 복사)
 
 					for i := len(keyBytes) - 1; i >= 4; i-- {
 						var keyCheck int
 						keyCheck = 0
-						log.Println(keyCheck)
+
 						if keyBytes[i] == '~' {
 							check = true
 							keyCheck = i
 						} else if !check {
-							log.Println("현재 KeyBytes", keyBytes)
+							log.Println("현재 KeyBytes", string(keyBytes))
 							m := math.Pow(10, float64(len(keyBytes)-i-1))
 							end += int(keyBytes[i]-48) * int(m)
 						} else if check {
-							log.Println("현재2 KeyBytes", keyBytes)
+
 							m := math.Pow(10, float64(keyCheck-1-i))
 							start += int(keyBytes[i]-48) * int(m)
 						}
@@ -464,7 +478,7 @@ func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingReques
 
 					if req.Start == int32(start) && req.End == int32(end) {
 
-						err = b.Delete([]byte{72, 97, 115, 104, 48, 126, 57})
+						err = b.Delete([]byte("Hash" + (strconv.Itoa(start) + "~" + strconv.Itoa(end))))
 						checkErr(err)
 						if nodeId%3000 < 9 {
 							log.Println("Hash" + (strconv.Itoa(start) + "~" + strconv.Itoa(end-1)))
@@ -492,8 +506,9 @@ func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingReques
 	return &proto.RsReEncodingResponse{Success: true}, nil
 }
 func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*proto.DataResponse, error) {
+	log.Println("DataTransfer")
 	cnt := 0
-	data := make([][]byte, 10)
+	data := make([][]byte, 100)
 	enc, err := reedsolomon.New(7, 3)
 	checkErr(err)
 
@@ -523,8 +538,7 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 			response, err := cli.blockchain.GetShard(context.Background(), request)
 			if err != nil {
 				log.Println("연결실패!", knownNodes[k])
-				data[k] = nil
-
+				data = append(data, nil)
 			} else {
 
 				bytes := response.Bytes
@@ -541,7 +555,7 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 				cnt = 0
 
 				for j := 0; ; j++ {
-					if cnt == size {
+					if cnt == size-1 {
 						break
 					}
 					data[cnt*10+k] = make([]byte, 2048)
@@ -555,14 +569,22 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 		}
 	}
 	listCnt := 0
+	log.Println("list", list)
 
-	for k := 0; k < 1; k++ {
+	for k := 0; k < 10; k++ {
+		checkCnt := 0
 		log.Println("KKK")
 		log.Println(list)
-		RsData := make([][]byte, len(data))
-
+		log.Println("len(data)", len(data))
+		RsData := make([][]byte, 10)
+		log.Println(list[listCnt], "\n", list[listCnt+1])
 		for i := list[listCnt]; i <= list[listCnt+1]; i++ {
-			RsData[i] = data[i]
+			if i == list[listCnt] {
+				RsData[checkCnt] = nil
+			} else {
+				RsData[checkCnt] = data[i]
+			}
+			checkCnt++
 		}
 
 		log.Println("Reconstruct")
@@ -586,14 +608,15 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 
 			cli.blockchain.RsReEncoding(context.Background(), &blockchain.RsReEncodingRequest{
 				NodeId: knownNodes[j][10:],
-				Start:  0,
-				End:    9,
+				Start:  list[listCnt],
+				End:    list[listCnt+1],
 				F:      2,
 				NF:     7,
 				Data:   RsData,
 			})
+			listCnt++
 		}
-		listCnt++
+
 	}
 
 	return &proto.DataResponse{Success: true}, nil
@@ -630,26 +653,24 @@ func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkT
 					cnt++
 
 					block := DeserializeBlock(data[cnt-1])
-
+					log.Println("블럭 높이:", block.Height)
 					for _, tx := range block.Transactions {
 						if bytes.Equal(tx.ID, req.VinId) {
 							log.Println("TX----", tx)
 
-							for _, tx := range block.Transactions {
-								if bytes.Equal(tx.ID, req.VinId) {
-									check = true
+							check = true
 
-									log.Println(req.NodeId, "에서 발견")
-									foundTx = tx.TrimmedCopy() // 찾은 트랜잭션의 값을 복사하여 할당
-									return nil
-								}
-							}
-
+							log.Println(req.NodeId, "에서 발견")
+							foundTx = tx.TrimmedCopy() // 찾은 트랜잭션의 값을 복사하여 할당
+							return nil
 						}
+
 					}
 				}
 				keyBytes, _ = c.Prev() // 이전 항목으로 이동
-
+				if keyBytes == nil {
+					return nil
+				}
 			}
 
 		}
@@ -681,7 +702,7 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 	check := false
 	start := 0
 	end := 0
-	im := 2
+	im := 0
 
 	err := bc.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
@@ -695,43 +716,40 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 			targetBytes := []byte{72, 97, 115, 104}
 
 			for keyBytes != nil {
-				log.Println("1")
-				if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) {
-					log.Println("keyBytes:", keyBytes)
+
+				if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) && len(keyBytes) < 10 {
+
 					// value의 내용을 새로운 슬라이스에 복사하여 추가 (깊은 복사)
 					value := b.Get(keyBytes)
 					copiedValue := make([]byte, len(value))
 					copy(copiedValue, value)
-					log.Println(copiedValue)
+
 					data = append(data, copiedValue)
-					log.Println(data)
-					log.Println("2")
+					var keyCheck int
+					keyCheck = 0
+					log.Println(keyCheck)
 					for i := len(keyBytes) - 1; i >= 4; i-- {
-						log.Println("3")
-						var keyCheck int
-						keyCheck = 0
-						log.Println(keyCheck)
+
 						if keyBytes[i] == '~' {
 							check = true
 							keyCheck = i
 						} else if !check {
 
-							log.Println("현재 KeyBytes", keyBytes)
+							log.Println("현재 KeyBytes", string(keyBytes))
 							m := math.Pow(10, float64(len(keyBytes)-i-1))
 							end += int(keyBytes[i]-48) * int(m)
 						} else if check {
-							log.Println("현재2 KeyBytes", keyBytes)
+
 							m := math.Pow(10, float64(keyCheck-1-i))
 							start += int(keyBytes[i]-48) * int(m)
 						}
 					}
-					log.Println("4")
-					log.Println("!")
+
 					list = append(list, make([]int32, 2)...)
 
-					list[im-2] = int32(start)
-					list[im-1] = int32(end)
-
+					list[im] = int32(start)
+					list[im+1] = int32(end)
+					log.Println("list", list)
 					cnt++
 					im += 2
 					check = false
@@ -744,8 +762,7 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 				if keyBytes == nil {
 					return nil
 				}
-				log.Println(keyBytes)
-				log.Println("5")
+
 				lastKey = string(keyBytes)
 			}
 
@@ -753,15 +770,19 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 
 		return nil
 	})
-	log.Println(data[0])
+
 	checkErr(err)
-	log.Println("6")
+
 	return &proto.GetShardResponse{
 		Bytes: data, // 깊은 복사된 슬라이스를 반환
 		List:  list,
 	}, nil
 }
 
+func (s *server) GetOneShard(ctx context.Context, req *proto.GetOneShardRequest) (*proto.GetOneShardResponse, error) {
+
+	return &proto.GetOneShardResponse{Data: nil}, nil
+}
 func (s *server) DeleteMempool(ctx context.Context, req *proto.DeleteMempoolRequest) (*proto.DeleteMempoolResponse, error) {
 	log.Println("\n\n\n\nMEMPOLL SIZE", len(mempool))
 	for key := range mempool {
