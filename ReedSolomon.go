@@ -38,7 +38,7 @@ func RsEncoding(count int32, f int32, NF int32) {
 		}(i)
 	}
 	wg.Wait()
-	log.Println("1")
+
 	/*
 		failNodeslist := make([]string, 10)
 		failNodesCheckCount := 0

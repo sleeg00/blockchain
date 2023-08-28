@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"os"
 
@@ -57,36 +58,34 @@ func main() {
 
 	cli.Run()
 
-	/*
+	startTime := time.Now()
 
-		startTime := time.Now()
-
-		for k := 0; k < 10; k++ {
-			log.Println("k", k)
-			for i := 0; i < 10; i++ {
-				nodeID = "3000"
-				originalArgs := os.Args
-				os.Args = []string{
-					originalArgs[0],
-					"send",
-					"-from",
-					"12aTcP7x7PxZcqs7DbsPUS1NY8HZcaVwqV",
-					"-to",
-					"1K6BBBMDJVEjP4ZdBMNvN2jKVc2CeHTEWA",
-					"-amount",
-					"1",
-					"-mine",
-				}
-
-				cli.Run()
-				os.Args = originalArgs
+	for k := 0; k < 10; k++ {
+		log.Println("k", k)
+		for i := 0; i < 10; i++ {
+			nodeID = "3000"
+			originalArgs := os.Args
+			os.Args = []string{
+				originalArgs[0],
+				"send",
+				"-from",
+				"12aTcP7x7PxZcqs7DbsPUS1NY8HZcaVwqV",
+				"-to",
+				"1K6BBBMDJVEjP4ZdBMNvN2jKVc2CeHTEWA",
+				"-amount",
+				"1",
+				"-mine",
 			}
 
+			cli.Run()
+			os.Args = originalArgs
 		}
 
-		elapsedTime := time.Since(startTime)
-		fmt.Printf("Total time taken: %s\n", elapsedTime)
-	*/
+	}
+
+	elapsedTime := time.Since(startTime)
+	fmt.Printf("Total time taken: %s\n", elapsedTime)
+
 }
 
 // Run parses command line arguments and processes commands
@@ -328,7 +327,7 @@ func (cli *CLI) Run() {
 			f = (invaildNodeCount - 1) / 3
 			NF = invaildNodeCount - f
 			log.Println(newblock.Height)
-			if newblock.Height%7 == 0 && newblock.Height != 0 {
+			if newblock.Height%8 == 0 && newblock.Height != 0 {
 				log.Println("RsEncoding!!!!!")
 				RsEncoding(int32(newblock.Height/7), int32(3), int32(7))
 			}

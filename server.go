@@ -188,7 +188,6 @@ func (s *server) CreateBlockchain(ctx context.Context, req *blockchain.CreateBlo
 }
 
 func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendResponse, error) {
-
 	log.Println("Send - Server receive a block")
 	Tx := convertToTransaction(req.Block)
 
@@ -538,7 +537,6 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 			response, err := cli.blockchain.GetShard(context.Background(), request)
 			if err != nil {
 				log.Println("연결실패!", knownNodes[k])
-				data = append(data, nil)
 			} else {
 
 				bytes := response.Bytes
@@ -548,14 +546,12 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 				//log.Println(DeserializeBlock(bytes))
 
 				size := len(bytes)
-				if k == 0 {
-					data = make([][]byte, size*10)
-				}
+
 				log.Println("SIZE", size)
 				cnt = 0
 
 				for j := 0; ; j++ {
-					if cnt == size-1 {
+					if cnt == size {
 						break
 					}
 					data[cnt*10+k] = make([]byte, 2048)
@@ -565,7 +561,7 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 
 				}
 			}
-			log.Println("3")
+
 		}
 	}
 	listCnt := 0
@@ -573,18 +569,22 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 
 	for k := 0; k < 10; k++ {
 		checkCnt := 0
-		log.Println("KKK")
+
 		log.Println(list)
-		log.Println("len(data)", len(data))
+
 		RsData := make([][]byte, 10)
 		log.Println(list[listCnt], "\n", list[listCnt+1])
 		for i := list[listCnt]; i <= list[listCnt+1]; i++ {
-			if i == list[listCnt] {
+			if checkCnt == 0 {
 				RsData[checkCnt] = nil
 			} else {
 				RsData[checkCnt] = data[i]
 			}
 			checkCnt++
+			if k == 0 {
+				log.Println(data[i])
+				log.Println(i)
+			}
 		}
 
 		log.Println("Reconstruct")
@@ -614,9 +614,9 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 				NF:     7,
 				Data:   RsData,
 			})
-			listCnt++
-		}
 
+		}
+		listCnt += 2
 	}
 
 	return &proto.DataResponse{Success: true}, nil
@@ -745,8 +745,8 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 						}
 					}
 
-					list = append(list, make([]int32, 2)...)
-
+					list = append(list, int32(start))
+					list = append(list, int32(end))
 					list[im] = int32(start)
 					list[im+1] = int32(end)
 					log.Println("list", list)
