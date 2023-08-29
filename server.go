@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/boltdb/bolt"
 	"github.com/klauspost/reedsolomon"
@@ -121,6 +122,7 @@ func StartServer(nodeID, minerAddress string) {
 	case sig := <-stop:
 		log.Printf("Received signal: %v", sig)
 	}
+	startTime := time.Now()
 
 	// 서버 종료 후에 로직 실행
 	log.Println("Server stopped. Executing reconnect and send request logic...")
@@ -131,7 +133,7 @@ func StartServer(nodeID, minerAddress string) {
 		return
 	}
 	defer conn.Close()
-	log.Println("0")
+
 	newClient := blockchain.NewBlockchainServiceClient(conn)
 
 	var list2 []int32
@@ -144,12 +146,12 @@ func StartServer(nodeID, minerAddress string) {
 	}
 
 	res, err := newClient.DataTransfer(context.Background(), req)
-	log.Println("1")
+
 	if err != nil {
 		log.Printf("SendData failed: %v", err)
 		return
 	}
-	log.Println("2")
+
 	if res.Success {
 		log.Println("Data send successfully")
 	} else {
@@ -157,6 +159,8 @@ func StartServer(nodeID, minerAddress string) {
 	}
 
 	log.Println("Reconnect and send request logic executed")
+	elapsedTime := time.Since(startTime)
+	fmt.Printf("Total time taken: %s\n", elapsedTime)
 
 }
 func (s *server) CreateWallet(ctx context.Context, req *blockchain.CreateWalletRequest) (*blockchain.CreateWalletResponse, error) {
@@ -413,6 +417,7 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	return &blockchain.RSEncodingResponse{}, nil
 }
 func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingRequest) (*proto.RsReEncodingResponse, error) {
+	startTime := time.Now()
 	log.Println("RsReEncoding")
 	nodeId, err := strconv.Atoi(req.NodeId)
 	checkErr(err)
@@ -436,16 +441,17 @@ func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingReques
 	log.Println(enc.Verify(RsData))
 	enc.Encode(RsData)
 	log.Println(enc.Verify(RsData))
-
+	elapsedTime := time.Since(startTime)
+	fmt.Printf("Encode Total time taken: %s\n", elapsedTime)
 	var start int
 	var end int
+	startTime2 := time.Now()
 	err = bc.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
 		c := b.Cursor()
 		if c != nil {
 			// 키 공간을 역순으로 순회하여 가장 마지막 항목을 찾음
 			keyBytes, _ := c.Last()
-			log.Println(keyBytes)
 
 			targetBytes := []byte{72, 97, 115, 104}
 			check := false
@@ -502,6 +508,8 @@ func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingReques
 		}
 		return nil
 	})
+	elapsedTime2 := time.Since(startTime2)
+	fmt.Printf("Save Total time taken: %s\n", elapsedTime2)
 	return &proto.RsReEncodingResponse{Success: true}, nil
 }
 func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*proto.DataResponse, error) {
@@ -510,6 +518,7 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 	data := make([][]byte, 100)
 	enc, err := reedsolomon.New(7, 3)
 	checkErr(err)
+	startTime := time.Now()
 
 	for k := 0; k < len(knownNodes); k++ {
 
@@ -564,61 +573,76 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 
 		}
 	}
+	elapsedTime := time.Since(startTime)
+	fmt.Printf("GetShard Total time taken: %s\n", elapsedTime)
 	listCnt := 0
 	log.Println("list", list)
-
+	startTime2 := time.Now()
+	var wg sync.WaitGroup
 	for k := 0; k < 10; k++ {
-		checkCnt := 0
+		wg.Add(1)
 
-		log.Println(list)
+		go func(listCnt int) {
+			defer wg.Done()
 
-		RsData := make([][]byte, 10)
-		log.Println(list[listCnt], "\n", list[listCnt+1])
-		for i := list[listCnt]; i <= list[listCnt+1]; i++ {
-			if checkCnt == 0 {
-				RsData[checkCnt] = nil
-			} else {
-				RsData[checkCnt] = data[i]
-			}
-			checkCnt++
-			if k == 0 {
-				log.Println(data[i])
-				log.Println(i)
-			}
-		}
+			checkCnt := 0
 
-		log.Println("Reconstruct")
-		enc.Reconstruct(RsData)
-		log.Println(enc.Verify(RsData))
-		for j := 0; j < len(knownNodes); j++ {
-
-			serverAddress := fmt.Sprintf("localhost:%s", knownNodes[j][10:])
-			conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-
-			if err != nil {
-				log.Fatalf("Failed to connect to gRPC server: %v", err)
-			}
-			defer conn.Close()
-
-			client := blockchain.NewBlockchainServiceClient(conn)
-			cli := CLI{
-				nodeID:     knownNodes[j][10:],
-				blockchain: client,
+			RsData := make([][]byte, 10)
+			log.Println(list[listCnt], "\n", list[listCnt+1])
+			for i := list[listCnt]; i <= list[listCnt+1]; i++ {
+				if checkCnt == 0 {
+					RsData[checkCnt] = nil
+				} else {
+					RsData[checkCnt] = data[i]
+				}
+				checkCnt++
 			}
 
-			cli.blockchain.RsReEncoding(context.Background(), &blockchain.RsReEncodingRequest{
-				NodeId: knownNodes[j][10:],
-				Start:  list[listCnt],
-				End:    list[listCnt+1],
-				F:      2,
-				NF:     7,
-				Data:   RsData,
-			})
+			startTime3 := time.Now()
+			log.Println("Reconstruct")
+			log.Println(enc.Verify(RsData))
+			enc.Reconstruct(RsData)
+			log.Println(enc.Verify(RsData))
+			elapsedTime3 := time.Since(startTime3)
+			fmt.Printf("RsEncoding Total time taken: %s\n", elapsedTime3)
 
-		}
+			for j := 0; j < len(knownNodes); j++ {
+				wg.Add(1)
+				go func(j int) {
+					defer wg.Done()
+
+					serverAddress := fmt.Sprintf("localhost:%s", knownNodes[j][10:])
+					conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+
+					if err != nil {
+						log.Fatalf("Failed to connect to gRPC server: %v", err)
+					}
+					defer conn.Close()
+
+					client := blockchain.NewBlockchainServiceClient(conn)
+					cli := CLI{
+						nodeID:     knownNodes[j][10:],
+						blockchain: client,
+					}
+
+					cli.blockchain.RsReEncoding(context.Background(), &blockchain.RsReEncodingRequest{
+						NodeId: knownNodes[j][10:],
+						Start:  list[listCnt],
+						End:    list[listCnt+1],
+						F:      2,
+						NF:     7,
+						Data:   RsData,
+					})
+				}(j)
+			}
+		}(listCnt)
+
 		listCnt += 2
 	}
 
+	wg.Wait()
+	elapsedTime2 := time.Since(startTime2)
+	fmt.Printf("Total time taken: %s\n", elapsedTime2)
 	return &proto.DataResponse{Success: true}, nil
 }
 func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkTransactionRequest) (*proto.FindChunkTransactionReponse, error) {
