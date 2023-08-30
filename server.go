@@ -417,15 +417,20 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	return &blockchain.RSEncodingResponse{}, nil
 }
 func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingRequest) (*proto.RsReEncodingResponse, error) {
-	startTime := time.Now()
+
 	log.Println("RsReEncoding")
 	nodeId, err := strconv.Atoi(req.NodeId)
 	checkErr(err)
 
+	startTime4 := time.Now()
 	bc := NewBlockchain(req.NodeId)
 	defer bc.db.Close()
+	elapsedTime4 := time.Since(startTime4)
+	fmt.Printf("Open The DB time taken: %s\n", elapsedTime4)
 
+	startTime := time.Now()
 	log.Println("NF: ", req.NF, "  F: ", req.F)
+
 	enc, err := reedsolomon.New(7, 2) //비잔틴 장애 내성 가지도록 설계
 	checkErr(err)
 
@@ -488,7 +493,10 @@ func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingReques
 						if nodeId%3000 < 9 {
 							log.Println("Hash" + (strconv.Itoa(start) + "~" + strconv.Itoa(end-1)))
 							save := RsData[nodeId%3000]
+							startTime3 := time.Now()
 							b.Put([]byte("Hash"+(strconv.Itoa(start)+"~"+strconv.Itoa(end-1))), save)
+							elapsedTime3 := time.Since(startTime3)
+							fmt.Printf("DB Total time taken: %s\n", elapsedTime3)
 
 							log.Println("End", end)
 						}
