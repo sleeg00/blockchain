@@ -16,3 +16,9 @@
 - Reed-Solomon 부호화 적용
 - Transaction 검증 방식 변경
 - ... 
+
+## 🖼️ 주요 그림
+<img width="520" alt="스크린샷 2023-11-16 오후 4 17 28" src="https://github.com/sleeg00/blockchain/assets/96710732/46468a99-1c63-4be3-89ec-4367cd9a8bee">
+<img width="350" alt="스크린샷 2023-11-16 오후 4 17 44" src="https://github.com/sleeg00/blockchain/assets/96710732/603bc79c-0d4a-4cda-96c3-fb7d6b047b7c">
+<img width="300" alt="스크린샷 2023-11-16 오후 4 17 53" src="https://github.com/sleeg00/blockchain/assets/96710732/755cb5e4-f647-45e0-a839-5365f46ec5ea">
+<img width="240" alt="스크린샷 2023-11-16 오후 4 18 01" src="https://github.com/sleeg00/blockchain/assets/96710732/034fcdc6-bfb5-4c8a-9c59-21fc0f2ec70b">
