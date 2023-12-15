@@ -8,8 +8,6 @@ import (
 	"crypto/sha256"
 	"math/big"
 	"strings"
-	"sync"
-	"time"
 
 	"encoding/gob"
 	"encoding/hex"
@@ -17,7 +15,7 @@ import (
 	"log"
 )
 
-const subsidy = 2000000
+const subsidy = 10
 
 // Transaction represents a Bitcoin transaction
 type Transaction struct {
@@ -51,15 +49,16 @@ func (tx *Transaction) Hash() []byte {
 	txCopy := *tx
 	txCopy.ID = []byte{}
 
-	data := bytes.Join([][]byte{txCopy.Serialize(), []byte(time.Now().String())}, []byte{})
-	hash = sha256.Sum256(data)
+	hash = sha256.Sum256(txCopy.Serialize())
 
 	return hash[:]
 }
 
 // Sign signs each input of a Transaction
 func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transaction) {
+	log.Println("sign")
 	if tx.IsCoinbase() {
+		log.Println("co")
 		return
 	}
 
@@ -85,8 +84,10 @@ func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transac
 		signature := append(r.Bytes(), s.Bytes()...)
 
 		tx.Vin[inID].Signature = signature
+
 		txCopy.Vin[inID].PubKey = nil
 	}
+
 }
 
 // String returns a human-readable representation of a transaction
@@ -133,7 +134,9 @@ func (tx *Transaction) TrimmedCopy() Transaction {
 
 // Verify verifies signatures of Transaction inputs
 func (tx *Transaction) Verify(prevTXs map[string]Transaction) bool {
+	log.Println("verfiy")
 	if tx.IsCoinbase() {
+		log.Println("????!@!@")
 		return true
 	}
 
@@ -145,41 +148,33 @@ func (tx *Transaction) Verify(prevTXs map[string]Transaction) bool {
 
 	txCopy := tx.TrimmedCopy()
 	curve := elliptic.P256()
-	check := false
-	var wg sync.WaitGroup
+
 	for inID, vin := range tx.Vin {
-		wg.Add(1)
-		go func(inID int, vin TXInput) {
-			defer wg.Done()
+		prevTx := prevTXs[hex.EncodeToString(vin.Txid)]
+		txCopy.Vin[inID].Signature = nil
+		txCopy.Vin[inID].PubKey = prevTx.Vout[vin.Vout].PubKeyHash
 
-			prevTx := prevTXs[hex.EncodeToString(vin.Txid)]
-			txCopy.Vin[inID].Signature = nil
-			txCopy.Vin[inID].PubKey = prevTx.Vout[vin.Vout].PubKeyHash
+		r := big.Int{}
+		s := big.Int{}
+		sigLen := len(vin.Signature)
+		r.SetBytes(vin.Signature[:(sigLen / 2)])
+		s.SetBytes(vin.Signature[(sigLen / 2):])
 
-			r := big.Int{}
-			s := big.Int{}
-			sigLen := len(vin.Signature)
-			r.SetBytes(vin.Signature[:(sigLen / 2)])
-			s.SetBytes(vin.Signature[(sigLen / 2):])
+		x := big.Int{}
+		y := big.Int{}
+		keyLen := len(vin.PubKey)
+		x.SetBytes(vin.PubKey[:(keyLen / 2)])
+		y.SetBytes(vin.PubKey[(keyLen / 2):])
 
-			x := big.Int{}
-			y := big.Int{}
-			keyLen := len(vin.PubKey)
-			x.SetBytes(vin.PubKey[:(keyLen / 2)])
-			y.SetBytes(vin.PubKey[(keyLen / 2):])
+		dataToVerify := fmt.Sprintf("%x\n", txCopy)
 
-			dataToVerify := fmt.Sprintf("%x\n", txCopy)
-
-			rawPubKey := ecdsa.PublicKey{Curve: curve, X: &x, Y: &y}
-			if ecdsa.Verify(&rawPubKey, []byte(dataToVerify), &r, &s) == false {
-				check = true
-			}
-			txCopy.Vin[inID].PubKey = nil
-		}(inID, vin)
+		rawPubKey := ecdsa.PublicKey{Curve: curve, X: &x, Y: &y}
+		if ecdsa.Verify(&rawPubKey, []byte(dataToVerify), &r, &s) == false {
+			return true
+		}
+		txCopy.Vin[inID].PubKey = nil
 	}
-	if check == true {
-		return false
-	}
+
 	return true
 }
 
@@ -196,7 +191,6 @@ func NewCoinbaseTX(to, data string) *Transaction {
 	}
 
 	txin := TXInput{[]byte{}, -1, nil, []byte(data)}
-	log.Println("mineAddress?: " + to)
 	txout := NewTXOutput(subsidy, to)
 	tx := Transaction{nil, []TXInput{txin}, []TXOutput{*txout}}
 	tx.ID = tx.Hash()
@@ -205,7 +199,7 @@ func NewCoinbaseTX(to, data string) *Transaction {
 }
 
 // NewUTXOTransaction creates a new transaction
-func NewUTXOTransaction(wallet *Wallet, to string, amount int, UTXOSet *UTXOSet) *Transaction {
+func NewUTXOTransaction(wallet *Wallet, to string, amount int, UTXOSet *UTXOSet, bc *Blockchain) *Transaction {
 	var inputs []TXInput
 	var outputs []TXOutput
 
@@ -232,8 +226,6 @@ func NewUTXOTransaction(wallet *Wallet, to string, amount int, UTXOSet *UTXOSet)
 	// Build a list of outputs
 	from := fmt.Sprintf("%s", wallet.GetAddress())
 	outputs = append(outputs, *NewTXOutput(amount, to))
-	log.Println("acc", acc)
-	log.Println("amount", amount)
 	if acc > amount {
 		outputs = append(outputs, *NewTXOutput(acc-amount, from)) // a change
 	}
@@ -257,16 +249,4 @@ func DeserializeTransaction(data []byte) Transaction {
 	}
 
 	return transaction
-}
-
-func DeserializeTransactionPointer(data []byte) *Transaction {
-	var transaction Transaction
-
-	decoder := gob.NewDecoder(bytes.NewReader(data))
-	err := decoder.Decode(&transaction)
-	if err != nil {
-		log.Panic(err)
-	}
-
-	return &transaction
 }

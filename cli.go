@@ -4,8 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
-	"sync"
+	"time"
 
 	"os"
 
@@ -25,6 +26,8 @@ var failNodesCheck int
 
 var NF int
 var f int
+var k int
+var p int
 
 func (cli *CLI) printUsage() {
 	fmt.Println("Usage:")
@@ -57,35 +60,6 @@ func main() {
 
 	cli.Run()
 
-	/*
-		startTime := time.Now()
-
-		for k := 0; k < 10; k++ {
-			log.Println("k", k)
-			for i := 0; i < 10; i++ {
-				nodeID = "3000"
-				originalArgs := os.Args
-				os.Args = []string{
-					originalArgs[0],
-					"send",
-					"-from",
-					"12aTcP7x7PxZcqs7DbsPUS1NY8HZcaVwqV",
-					"-to",
-					"1K6BBBMDJVEjP4ZdBMNvN2jKVc2CeHTEWA",
-					"-amount",
-					"1",
-					"-mine",
-				}
-
-				cli.Run()
-				os.Args = originalArgs
-			}
-
-		}
-
-		elapsedTime := time.Since(startTime)
-		fmt.Printf("Total time taken: %s\n", elapsedTime)
-	*/
 }
 
 // Run parses command line arguments and processes commands
@@ -103,7 +77,9 @@ func (cli *CLI) Run() {
 	sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
 	startNodeCmd := flag.NewFlagSet("startnode", flag.ExitOnError)
 	nodeCmd := flag.NewFlagSet("node", flag.ExitOnError)
-
+	fileCmd := flag.NewFlagSet("file", flag.ExitOnError)
+	cpBlockCmd := flag.NewFlagSet("cp", flag.ExitOnError)
+	sendNumberOfBlockCmd := flag.NewFlagSet("block", flag.ExitOnError)
 	getBalanceAddress := getBalanceCmd.String("address", "", "The address to get balance for")
 	createBlockchainAddress := createBlockchainCmd.String("address", "", "The address to send genesis block reward to")
 	sendFrom := sendCmd.String("from", "", "Source wallet address")
@@ -112,8 +88,21 @@ func (cli *CLI) Run() {
 	sendMine := sendCmd.Bool("mine", false, "Mine immediately on the same node")
 	startNodeMiner := startNodeCmd.String("miner", "", "Enable mining mode and send reward to ADDRESS")
 	node := nodeCmd.String("node", "", "Node is Setting")
+	sendNumberOfBlock := sendNumberOfBlockCmd.Int("block", 0, "OK")
+
+	cpBlockCmd.String("cp", "", "ok")
 
 	switch os.Args[1] {
+	case "cp":
+		err := cpBlockCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
+	case "block":
+		err := sendNumberOfBlockCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
 	case "getbalance":
 		err := getBalanceCmd.Parse(os.Args[2:])
 		if err != nil {
@@ -159,11 +148,116 @@ func (cli *CLI) Run() {
 		if err != nil {
 			log.Panic(err)
 		}
+	case "file":
+		err := fileCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
 	default:
 		cli.printUsage()
 		os.Exit(1)
 	}
+	if cpBlockCmd.Parsed() {
+		for i := 1; i < len(knownNodes); i++ {
 
+			sourceFile, err := os.Open("blockchain_3000.db")
+			checkErr(err)
+			defer sourceFile.Close()
+
+			destFile, err := os.Create("blockchain_" + knownNodes[i][10:] + ".db")
+			if err != nil {
+				log.Println(err)
+			}
+			defer destFile.Close()
+
+			_, err = io.Copy(destFile, sourceFile)
+			checkErr(err)
+		}
+		log.Println("복사완료")
+	}
+	if sendNumberOfBlockCmd.Parsed() {
+		for i := 1; i < len(knownNodes); i++ {
+
+			sourceFile, err := os.Open("blockchain_3000.db")
+			checkErr(err)
+			defer sourceFile.Close()
+
+			destFile, err := os.Create("blockchain_" + knownNodes[i][10:] + ".db")
+			if err != nil {
+				log.Println(err)
+			}
+			defer destFile.Close()
+
+			_, err = io.Copy(destFile, sourceFile)
+			checkErr(err)
+		}
+
+		startTime := time.Now()
+
+		for k = 0; k < *sendNumberOfBlock; k++ {
+			log.Println("k", k)
+
+			for i := 0; i < 10; i++ {
+
+				nodeID = "3000"
+				originalArgs := os.Args
+				os.Args = []string{
+					originalArgs[0],
+					"send",
+					"-from",
+					"1Jw6XpfDDAZ3UK37VRytkQvd8VcVM2HC6L",
+					"-to",
+					"1J6GzxwAfgRdZ4yrqSbos96J3Z6mjmCpRP",
+					"-amount",
+					"1",
+					"-mine",
+				}
+
+				cli.Run()
+				os.Args = originalArgs
+			}
+
+		}
+
+		elapsedTime := time.Since(startTime)
+		fmt.Printf("Total time taken: %s\n", elapsedTime)
+	}
+	if fileCmd.Parsed() {
+		for i := 0; i < len(knownNodes); i++ {
+			serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
+
+			conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+
+			if err != nil {
+				log.Println(knownNodes[i], "에 연결 실패!")
+				failNodes = append(failNodes, knownNodes[i][10:])
+				failNodesCheck++
+
+			} else {
+				client := blockchain.NewBlockchainServiceClient(conn)
+				cli := CLI{
+					nodeID:     nodeID,
+					blockchain: client,
+				}
+
+				request := &proto.SendRequest{
+					NodeTo: knownNodes[i][10:],
+				}
+				response, err := cli.blockchain.SaveFileSystem(context.Background(), request)
+				if response != nil {
+
+				}
+
+				if err != nil {
+					log.Println(knownNodes[i], "에 연결 실패!")
+					failNodes = append(failNodes, knownNodes[i][10:])
+					failNodesCheck++
+
+				}
+			}
+			conn.Close()
+		}
+	}
 	if nodeCmd.Parsed() {
 		nodeID = *node
 		serverAddress := fmt.Sprintf("localhost:%s", nodeID)
@@ -258,8 +352,15 @@ func (cli *CLI) Run() {
 		}
 
 		if *sendMine {
+
 			failNodesCheck = 0
-			newblock := send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
+			newblock, bc := send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
+
+			invaildNodeCount := 10 - failNodesCheck
+			f = (invaildNodeCount - 1) / 3
+			NF = invaildNodeCount - f
+			log.Println(newblock.Height)
+
 			log.Println("sendBlock")
 			//만약 블럭이 7개가 쌓였으면 인코딩한다
 
@@ -267,100 +368,168 @@ func (cli *CLI) Run() {
 			var protoTransactions []*proto.Transaction
 			protoTransactions = makeClientTransactions(newblock.Transactions)
 			var byte []byte
-			var wg sync.WaitGroup
-			for i := 0; i < len(knownNodes); i++ {
-				wg.Add(1)
-				go func(i int) {
-					defer wg.Done()
-					serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
-
-					conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-					defer conn.Close()
-					if err != nil {
-						log.Println(knownNodes[i], "에 연결 실패!")
-						failNodes = append(failNodes, knownNodes[i][10:])
-						failNodesCheck++
-
-					} else {
-						client := blockchain.NewBlockchainServiceClient(conn)
-						cli := CLI{
-							nodeID:     nodeID,
-							blockchain: client,
-						}
-
-						block := &proto.Block{
-							Timestamp:     newblock.Timestamp,
-							Transactions:  protoTransactions,
-							PrevBlockHash: newblock.PrevBlockHash,
-							Hash:          newblock.Hash,
-							Nonce:         int32(newblock.Nonce),
-							Height:        int32(newblock.Height),
-						}
-						// 서버에 보낼 요청 메시지 생성
-						request := &proto.SendRequest{
-							NodeTo: knownNodes[i][10:],
-							Block:  block,
-						}
-
-						// 서버에 요청 보내기
-						response, err := cli.blockchain.Send(context.Background(), request)
-						if err != nil {
-							log.Println(knownNodes[i], "에 연결 실패!")
-							failNodes = append(failNodes, knownNodes[i][10:])
-							failNodesCheck++
-
-						} else {
-
-							byte = response.Byte
-						}
-
-						if byte != nil {
-							newblock.PrevBlockHash = byte
-						}
-					}
-				}(i)
-			}
-
-			wg.Wait()
-
-			invaildNodeCount := 10 - failNodesCheck
-			f = (invaildNodeCount - 1) / 3
-			NF = invaildNodeCount - f
-			log.Println(newblock.Height)
-			if newblock.Height%8 == 0 && newblock.Height != 0 {
-				log.Println("RsEncoding!!!!!")
-				RsEncoding(int32(newblock.Height/7), int32(3), int32(7))
-			}
-
-			// Your existing code...
-
-		} else {
-			//-----모든 노드 mempool에 TX를 저장시킨다. -> UTXO도 업데이트 했다. //Block시도 확인해야한다.
-			tx := sendTrsaction(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
-
-			protoTx := makeOneTransaction(tx)
 
 			for i := 0; i < len(knownNodes); i++ {
 
 				serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
 
 				conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+
 				if err != nil {
-					log.Fatalf("Failed to connect to gRPC server: %v", err)
-				}
-				defer conn.Close()
+					log.Println(knownNodes[i], "에 연결 실패!")
+					failNodes = append(failNodes, knownNodes[i][10:])
+					failNodesCheck++
 
-				client := blockchain.NewBlockchainServiceClient(conn)
-				cli := CLI{
-					nodeID:     nodeID,
-					blockchain: client,
-				}
+				} else {
+					client := blockchain.NewBlockchainServiceClient(conn)
+					cli := CLI{
+						nodeID:     nodeID,
+						blockchain: client,
+					}
 
-				cli.requestTransaction(*sendFrom, *sendTo, *sendAmount, knownNodes[i][10:], *sendMine, protoTx, cli.nodeID)
+					block := &proto.Block{
+						Timestamp:     newblock.Timestamp,
+						Transactions:  protoTransactions,
+						PrevBlockHash: newblock.PrevBlockHash,
+						Hash:          newblock.Hash,
+						Nonce:         int32(newblock.Nonce),
+						Height:        int32(newblock.Height),
+					}
+					request := &proto.ConnectServerRequest{
+						NodeId: knownNodes[i][10:],
+						Block:  block,
+					}
+					response, err := cli.blockchain.Connect(context.Background(), request)
+					byte = response.Byte
+					if response != nil {
+						newblock.PrevBlockHash = byte
+					}
+
+					bc.db.Close()
+
+					// 서버에 보낼 요청 메시지 생성
+					requestSend := &proto.SendRequest{
+						NodeTo: knownNodes[i][10:],
+					}
+
+					responseSend, err := cli.blockchain.Send(context.Background(), requestSend)
+
+					if err != nil {
+						log.Println(knownNodes[i], "에 연결 실패!")
+						failNodes = append(failNodes, knownNodes[i][10:])
+						failNodesCheck++
+						log.Println(responseSend)
+					}
+					conn.Close()
+				}
 
 			}
 
-			//-----모든 노드 mempool에 TX를 저장시킨다.
+			if newblock.Height%7 == 0 && newblock.Height != 0 {
+				log.Println("RsEncoding!!!!!")
+				RsEncoding(int32(newblock.Height/7), int32(3), int32(7))
+			}
+			// Your existing code...
+
+		} else {
+			failNodesCheck = 0
+			newblock, bc := send(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
+
+			invaildNodeCount := 10 - failNodesCheck
+			f = (invaildNodeCount - 1) / 3
+			NF = invaildNodeCount - f
+			log.Println(newblock.Height)
+
+			log.Println("sendBlock")
+			//만약 블럭이 7개가 쌓였으면 인코딩한다
+
+			// 새로운 슬라이스를 만들고 txs의 값을 복사
+			var protoTransactions []*proto.Transaction
+			protoTransactions = makeClientTransactions(newblock.Transactions)
+			var byte []byte
+
+			for i := 0; i < len(knownNodes); i++ {
+
+				serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
+
+				conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+
+				if err != nil {
+					log.Println(knownNodes[i], "에 연결 실패!")
+					failNodes = append(failNodes, knownNodes[i][10:])
+					failNodesCheck++
+
+				} else {
+					client := blockchain.NewBlockchainServiceClient(conn)
+					cli := CLI{
+						nodeID:     nodeID,
+						blockchain: client,
+					}
+
+					block := &proto.Block{
+						Timestamp:     newblock.Timestamp,
+						Transactions:  protoTransactions,
+						PrevBlockHash: newblock.PrevBlockHash,
+						Hash:          newblock.Hash,
+						Nonce:         int32(newblock.Nonce),
+						Height:        int32(newblock.Height),
+					}
+					request := &proto.ConnectServerRequest{
+						NodeId: knownNodes[i][10:],
+						Block:  block,
+					}
+					response, err := cli.blockchain.Connect(context.Background(), request)
+					byte = response.Byte
+					if byte != nil {
+						newblock.PrevBlockHash = byte
+					}
+
+					bc.db.Close()
+					// 서버에 보낼 요청 메시지 생성
+					requestSend := &proto.SendRequest{
+						NodeTo: knownNodes[i][10:],
+					}
+
+					responseSend, err := cli.blockchain.Send(context.Background(), requestSend)
+
+					if err != nil {
+						log.Println(knownNodes[i], "에 연결 실패!")
+						failNodes = append(failNodes, knownNodes[i][10:])
+						failNodesCheck++
+						log.Println(responseSend)
+					}
+				}
+				conn.Close()
+			}
+
+			/*
+				//-----모든 노드 mempool에 TX를 저장시킨다. -> UTXO도 업데이트 했다. //Block시도 확인해야한다.
+				tx := sendTrsaction(*sendFrom, *sendTo, *sendAmount, nodeID, *sendMine)
+
+				protoTx := makeOneTransaction(tx)
+
+				for i := 0; i < len(knownNodes); i++ {
+
+					serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
+
+					conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+					if err != nil {
+						log.Fatalf("Failed to connect to gRPC server: %v", err)
+					}
+					defer conn.Close()
+
+					client := blockchain.NewBlockchainServiceClient(conn)
+					cli := CLI{
+						nodeID:     nodeID,
+						blockchain: client,
+					}
+
+					cli.requestTransaction(*sendFrom, *sendTo, *sendAmount, knownNodes[i][10:], *sendMine, protoTx, cli.nodeID)
+
+				}
+
+				//-----모든 노드 mempool에 TX를 저장시킨다.
+			*/
 		}
 	}
 	if startNodeCmd.Parsed() {

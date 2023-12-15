@@ -169,47 +169,46 @@ func (bc *Blockchain) AddBlock(block *Block) {
 
 // Input TXID에 맞는 TX가 있는지 찾는디 //이걸 UTXO를 찾는 것으로 바꿔도 될 거 같다
 func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
-
+	log.Println("FindTransaction")
 	bci := bc.Iterator()
-	var Height int
-	for x := 0; ; x++ {
-		log.Println(Height)
+
+	for {
 		block, err := bci.Next()
+
 		if err != nil {
 			break
 		}
-		log.Println("Block Height는? ", block.Height)
-		Height = block.Height
+		log.Println(block.Height)
 
-		checkErr(err)
 		for _, tx := range block.Transactions {
-			if bytes.Equal(tx.ID, ID) {
+			if bytes.Compare(tx.ID, ID) == 0 {
+				var transaction Transaction
+				log.Println("Equal?")
+				transaction = tx.TrimmedCopy()
+				log.Println("transaciton", transaction)
 				return *tx, nil
 			}
 		}
-
 		if len(block.PrevBlockHash) == 0 {
-
 			break
 		}
-
 	}
 
-	var wg sync.WaitGroup
 	var resultx Transaction
+
 	check := false
+	var wg sync.WaitGroup
 	for {
 		for i := 0; i < len(knownNodes)-3; i++ {
-			wg.Add(1)
+			wg.Add(1) // 각 고루틴이 작업을 마치면 Done 호출을 통해 대기 그룹을 종료합니다.
 			go func(i int) {
 				defer wg.Done()
-
 				serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
 
 				conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
 				if err != nil {
 					log.Printf("Failed to connect to gRPC server: %v", err)
-					return
+
 				}
 				defer conn.Close()
 
@@ -224,12 +223,9 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 				}
 
 				response, err := cli.blockchain.FindChunkTransaction(context.Background(), request)
-
 				if err != nil {
 					log.Printf("Error while finding chunk transaction: %v", err)
-					return
 				}
-
 				tx := response.Transaction
 
 				if tx != nil {
@@ -237,14 +233,16 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 					resultx = convertFromProtoTransaction(tx)
 				}
 			}(i)
+			wg.Wait()
 		}
-
-		// 모든 고루틴이 종료될 때까지 대기
 		wg.Wait()
-		if check == true {
+		if resultx.ID != nil {
+			log.Println("result", resultx.ID)
 			break
 		}
 	}
+	log.Println("check:", check)
+	// 모든 고루틴이 종료될 때까지 대기
 	if check == true {
 		return resultx, nil
 	} else {
@@ -368,6 +366,7 @@ func (bc *Blockchain) GetBlockHashes() [][]byte {
 
 // MineBlock mines a new block with the provided transactions
 func (bc *Blockchain) MineBlock(transactions []*Transaction) *Block {
+	log.Println("MineBlock")
 	var lastHash []byte
 	var lastHeight int
 
@@ -422,27 +421,25 @@ func (bc *Blockchain) MineBlock(transactions []*Transaction) *Block {
 
 // 트랜잭션 사인
 func (bc *Blockchain) SignTransaction(tx *Transaction, privKey ecdsa.PrivateKey) {
-
+	log.Println("SignTransaction")
 	prevTXs := make(map[string]Transaction)
 
 	for _, vin := range tx.Vin {
-
 		prevTX, err := bc.FindTransaction(vin.Txid)
-
 		if err != nil {
-			log.Println("\n\n", vin.Txid, "가 없습니다\n")
 			log.Panic(err)
 		}
 		prevTXs[hex.EncodeToString(prevTX.ID)] = prevTX
 	}
 
 	tx.Sign(privKey, prevTXs)
-
 }
 
 // 풀노드에서 트랜잭션 not Valid 판단
 func (bc *Blockchain) VerifyTransaction(tx *Transaction) bool {
+	log.Println("VerfiyTransaction")
 	if tx.IsCoinbase() {
+		log.Println("Coinbase!")
 		return true
 	}
 
@@ -451,7 +448,7 @@ func (bc *Blockchain) VerifyTransaction(tx *Transaction) bool {
 	for _, vin := range tx.Vin {
 		prevTX, err := bc.FindTransaction(vin.Txid) //내가 받은 TX가 존재하는 TX인지 검사 이전 TX에 추가
 		if err != nil {
-			log.Panic(err)
+			log.Panic("트랜잭션이 없다", err)
 		}
 		prevTXs[hex.EncodeToString(prevTX.ID)] = prevTX
 	}

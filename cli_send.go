@@ -2,32 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/boltdb/bolt"
 	"github.com/sleeg00/blockchain/proto"
 )
-
-func (cli *CLI) gRPCsendBlockRequest(node_id string, block *proto.Block) []byte {
-
-	// 서버에 보낼 요청 메시지 생성
-	request := &proto.SendRequest{
-		NodeTo: node_id,
-		Block:  block,
-	}
-
-	// 서버에 요청 보내기
-	response, err := cli.blockchain.Send(context.Background(), request)
-	if err != nil {
-		fmt.Println("Error sending request to node %s: %v", node_id, err)
-
-	} else {
-
-		return response.Byte
-	}
-	return nil
-}
 
 func (cli *CLI) requestTransaction(from, to string, amount int, node_id string, mineNow bool, transaction *proto.Transaction, node_from string) {
 	// 서버에 보낼 요청 메시지 생성
@@ -53,7 +32,7 @@ func (cli *CLI) requestTransaction(from, to string, amount int, node_id string, 
 
 }
 
-func send(from, to string, amount int, node_id string, mineNow bool) Block {
+func send(from, to string, amount int, node_id string, mineNow bool) (Block, *Blockchain) {
 	bc := NewBlockchainRead(node_id)
 
 	UTXOSet := UTXOSet{Blockchain: bc}
@@ -63,21 +42,13 @@ func send(from, to string, amount int, node_id string, mineNow bool) Block {
 		log.Panic(err)
 	}
 	wallet := wallets.GetWallet(from)
-
-	tx := NewUTXOTransaction(&wallet, to, amount, &UTXOSet) // 돈이 있는지 검사
+	tx := NewUTXOTransaction(&wallet, to, amount, &UTXOSet, bc) // 돈이 있는지 검사
 
 	cbTx := NewCoinbaseTX(from, "") // 마이닝했기 때문에 새로운 TX가 발생한다
 	txs := []*Transaction{cbTx, tx}
 
 	var lastHash []byte
 	var lastHeight int
-
-	for _, tx := range txs {
-		// TODO: ignore transaction if it's not valid
-		if !bc.VerifyTransaction(tx) {
-			log.Panic("ERROR: Invalid transaction")
-		}
-	}
 
 	err = bc.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(blocksBucket))
@@ -88,11 +59,17 @@ func send(from, to string, amount int, node_id string, mineNow bool) Block {
 		block := DeserializeBlock(blockData)
 
 		lastHeight = block.Height
-		log.Println("lastHeight", lastHeight)
+
 		return nil
 	})
 	if err != nil {
 		log.Panic(err)
+	}
+
+	// TODO: ignore transaction if it's not valid
+	if !bc.VerifyTransaction(tx) {
+		log.Println(tx)
+		log.Panic("ERROR: Invalid transaction")
 	}
 
 	blockChannel := make(chan Block) // 채널 생성
@@ -102,7 +79,7 @@ func send(from, to string, amount int, node_id string, mineNow bool) Block {
 	}()
 	newBlock := <-blockChannel // 채널로부터 결과를 받을 때까지 기다립니다.
 
-	return newBlock
+	return newBlock, bc
 
 }
 
@@ -117,7 +94,7 @@ func sendTrsaction(from, to string, amount int, node_id string, mineNow bool) *T
 	}
 	wallet := wallets.GetWallet(from)
 
-	tx := NewUTXOTransaction(&wallet, to, amount, &UTXOSet) //돈이 있는지 검사
+	tx := NewUTXOTransaction(&wallet, to, amount, &UTXOSet, bc) //돈이 있는지 검사
 
 	// TODO: ignore transaction if it's not valid
 	if !bc.VerifyTransaction(tx) {

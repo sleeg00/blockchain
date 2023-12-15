@@ -38,6 +38,7 @@ func (cli *CLI) startNode(nodeID, minerAddress string) {
 			log.Println("모든 노드 mempool에게서 TX를 가져와서 채굴노드 mempool에저장을 끝냈다")
 			log.Println("\n\n\n\n MEMpool size", len(mempool))
 			if len(mempool) >= 2 && len(minerAddress) > 0 {
+
 			MineTransactions:
 				//-------블럭 생성
 				log.Println("블럭을 생성한다.")
@@ -97,39 +98,41 @@ func (cli *CLI) startNode(nodeID, minerAddress string) {
 
 				log.Println("모든 노드에게 블럭을 전달한다.")
 				protoTransactions := makeClientTransactions(newblock.Transactions) //요청을 보낼 Block으로 마샬링한다
+				log.Println(protoTransactions)
+				/*
+					for i := 0; i < len(knownNodes); i++ {
 
-				for i := 0; i < len(knownNodes); i++ {
+						if nodeID == knownNodes[i][10:] {
+							bc.db.Close()
+						}
+						block := &proto.Block{
+							Timestamp:     newblock.Timestamp,
+							Transactions:  protoTransactions,
+							PrevBlockHash: newblock.PrevBlockHash,
+							Hash:          newblock.Hash,
+							Nonce:         int32(newblock.Nonce),
+							Height:        int32(newblock.Height),
+						}
 
-					if nodeID == knownNodes[i][10:] {
-						bc.db.Close()
+						serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
+
+						conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
+						if err != nil {
+							log.Fatalf("Failed to connect to gRPC server: %v", err)
+						}
+						defer conn.Close()
+
+						client := blockchain.NewBlockchainServiceClient(conn)
+						cli := CLI{
+							nodeID:     nodeID,
+							blockchain: client,
+						}
+
+						byte := cli.gRPCsendBlockRequest(knownNodes[i][10:], block)
+						newblock.PrevBlockHash = byte
+
 					}
-					block := &proto.Block{
-						Timestamp:     newblock.Timestamp,
-						Transactions:  protoTransactions,
-						PrevBlockHash: newblock.PrevBlockHash,
-						Hash:          newblock.Hash,
-						Nonce:         int32(newblock.Nonce),
-						Height:        int32(newblock.Height),
-					}
-
-					serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])
-
-					conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
-					if err != nil {
-						log.Fatalf("Failed to connect to gRPC server: %v", err)
-					}
-					defer conn.Close()
-
-					client := blockchain.NewBlockchainServiceClient(conn)
-					cli := CLI{
-						nodeID:     nodeID,
-						blockchain: client,
-					}
-
-					byte := cli.gRPCsendBlockRequest(knownNodes[i][10:], block)
-					newblock.PrevBlockHash = byte
-
-				}
+				*/
 				var wg sync.WaitGroup
 				for i := 0; i < len(knownNodes); i++ {
 					wg.Add(1)

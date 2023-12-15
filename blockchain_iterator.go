@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"log"
 
 	"github.com/boltdb/bolt"
 )
@@ -32,7 +33,7 @@ func (i *BlockchainIterator) Next() (*Block, error) {
 	})
 
 	if err != nil {
-
+		log.Println(err)
 		return block, errors.New("fail")
 	}
 

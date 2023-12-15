@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"encoding/gob"
 	"encoding/hex"
 	"fmt"
@@ -190,18 +191,28 @@ func (s *server) CreateBlockchain(ctx context.Context, req *blockchain.CreateBlo
 		Response: "Success",
 	}, nil
 }
-
-func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendResponse, error) {
+func (s *server) SendServer(ctx context.Context, req *proto.SendRequest) (*proto.SendResponse, error) {
 	log.Println("Send - Server receive a block")
+	log.Println("1")
+
+	log.Println("2")
+
+	log.Println("3")
+
+	log.Println("4")
+
+	return &proto.SendResponse{}, nil
+}
+
+var block Block
+
+func (s *server) Connect(ctx context.Context, req *proto.ConnectServerRequest) (*proto.ConnectServerResponse, error) {
+	log.Println("Connect Block")
 	Tx := convertToTransaction(req.Block)
 
-	bc := NewBlockchain(req.NodeTo)
-
-	defer bc.db.Close()
 	b := req.Block.PrevBlockHash
-	UTXOSet := UTXOSet{Blockchain: bc}
 
-	block := Block{
+	block = Block{
 		Timestamp:     req.Block.Timestamp,
 		PrevBlockHash: req.Block.PrevBlockHash,
 		Transactions:  Tx,
@@ -210,7 +221,18 @@ func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendR
 		Height:        int(req.Block.Height),
 	}
 
+	return &proto.ConnectServerResponse{Byte: b}, nil
+}
+
+func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendResponse, error) {
+	log.Println("Send - Server receive a block")
+
+	bc := NewBlockchain(req.NodeTo)
+	defer bc.db.Close()
+
+	UTXOSet := UTXOSet{Blockchain: bc}
 	err := bc.db.Update(func(tx *bolt.Tx) error {
+
 		b := tx.Bucket([]byte(blocksBucket))
 		a1 := block.Hash
 		b1 := block.Serialize()
@@ -233,12 +255,162 @@ func (s *server) Send(ctx context.Context, req *proto.SendRequest) (*proto.SendR
 	}
 
 	UTXOSet.Update(&block)
+	log.Println("블럭의 높이는:", block.Height)
+	return &proto.SendResponse{}, nil
+}
+func (s *server) SaveFileSystem(ctx context.Context, req *proto.SendRequest) (*proto.SendResponse, error) {
+	bc := NewBlockchain(req.NodeTo)
+	defer bc.db.Close()
+	for {
+		count := 0
 
-	response := &proto.SendResponse{
-		Byte: b,
+		bci := bc.Iterator()
+		nodeId, err := strconv.Atoi(req.NodeTo)
+		var checkList []int
+		enc, err := reedsolomon.New(7, 3) //비잔틴 장애 내성 가지도록 설계
+		checkErr(err)
+		//샤딩할 부분을 나눈다
+
+		data := make([][]byte, int(10))
+
+		for i := 0; ; i++ {
+			block, err := bci.Next()
+
+			checkErr(err)
+			if block.Height%7 == 0 {
+				break
+			}
+		}
+		log.Println("0")
+		for i := 6; i >= 0; i-- {
+			block, err := bci.Next() // 6
+			log.Println(block.Height)
+			checkErr(err)
+
+			log.Println("RSEncoding Block Height", block.Height)
+			newBlockBytes := block.Serialize()
+
+			data[i] = make([]byte, 2048)
+			copy(data[i], newBlockBytes)
+			checkList = append(checkList, block.Height)
+		}
+
+		for i := 7; i < 10; i++ {
+			data[i] = make([]byte, 2048)
+		}
+		err = enc.Encode(data)
+		log.Println("1")
+		checkErr(err)
+		log.Println("2")
+		ok, err := enc.Verify(data)
+		checkErr(err)
+		log.Println("3")
+
+		if ok == false {
+			log.Panicln("!@#!@#!@#!@#!@#!@#!@")
+		}
+		bci = bc.Iterator()
+
+		for i := 0; ; i++ {
+			block, err := bci.Next()
+			checkErr(err)
+			if block.Height%7 == 0 {
+				break
+			}
+		}
+
+		for i := 0; i < 7; i++ {
+			block, err := bci.Next() //6
+			log.Println("block:", block.Height)
+			log.Println("checkList: ", checkList)
+			checkErr(err)
+			if block.Height == checkList[i] {
+				err = bc.db.Update(func(tx *bolt.Tx) error {
+					b := tx.Bucket([]byte(blocksBucket))
+					blockInDb := b.Get(block.Hash)
+
+					if blockInDb == nil {
+						return nil
+					}
+					log.Println("삭제한 블럭 Height", DeserializeBlock(blockInDb).Height)
+					err := b.Delete(block.Hash)
+					err = b.Delete(bc.tip)
+					if err != nil {
+						log.Panic(err)
+					}
+
+					checkErr(err)
+					return nil
+				})
+				checkErr(err)
+			}
+		}
+
+		save := data[nodeId%3000]
+
+		end := 0
+		check := false
+		if count != 0 {
+			err = bc.db.Update(func(tx *bolt.Tx) error {
+				b := tx.Bucket([]byte(blocksBucket))
+				c := b.Cursor()
+				if c != nil {
+					keyBytes, _ := c.Last()
+
+					targetBytes := []byte{72, 97, 115, 104} // Hash
+					for keyBytes != nil {
+
+						if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) {
+							var keyCheck int
+							keyCheck = 0
+							log.Println(keyCheck)
+							for i := len(keyBytes) - 1; i >= 4; i-- {
+
+								if keyBytes[i] == '~' {
+									check = true
+									keyCheck = i
+								} else if !check {
+
+									log.Println("현재 KeyBytes", string(keyBytes))
+									m := math.Pow(10, float64(len(keyBytes)-i-1))
+									end += int(keyBytes[i]-48) * int(m)
+								}
+							}
+
+							return nil
+						}
+						keyBytes, _ = c.Prev() // 이전 항목으로 이동
+					}
+				}
+				return nil
+			})
+			checkErr(err)
+
+			startIndex := "Hash" + strconv.Itoa(end+1) + "~" + strconv.Itoa(end+int(3)+int(7))
+
+			file, err := os.OpenFile("/Users/leeseonghyeon/Documents/go/go/blockchain/"+nodeID+"/"+startIndex, os.O_RDWR|os.O_CREATE, 0666)
+			_, err = file.Write(save)
+			checkErr(err)
+			file.Close()
+		} else {
+			_, err := os.Stat(nodeID)
+			startIndex := "Hash0~" + strconv.Itoa(9)
+			//IsNotExist Folder -> mkdir Folder
+			if os.IsNotExist(err) {
+				err := os.Mkdir(nodeID, os.ModePerm)
+				checkErr(err)
+			}
+			file, err := os.OpenFile("/Users/leeseonghyeon/Documents/go/go/blockchain/"+nodeID+"/"+startIndex, os.O_RDWR|os.O_CREATE, 0666)
+			_, err = file.Write(save)
+			checkErr(err)
+			file.Close()
+		}
+		count++
+		if count == 10 {
+			break
+		}
 	}
-
-	return response, nil
+	return &proto.SendResponse{}, nil
 }
 
 func (s *server) Mining(ctx context.Context, req *proto.MiningRequest) (*proto.MiningResponse, error) {
@@ -284,6 +456,7 @@ func (s *server) CheckZombie(ctx context.Context, req *proto.CheckZombieRequest)
 // 0, 1, 2,3, 4, 5, 6, -- 7!
 // 7번째 블록이 생성될 떄 RSEncoding을 진행하면 문제없이 이전 블럭 해쉬값을 알 수 있다.!!
 func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (*proto.RSEncodingResponse, error) {
+
 	log.Println("RSEncoding")
 	nodeId, err := strconv.Atoi(req.NodeId)
 	checkErr(err)
@@ -297,10 +470,18 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	//샤딩할 부분을 나눈다
 
 	data := make([][]byte, int(10))
-	bci.Next() //7
 
+	for i := 0; ; i++ {
+		block, err := bci.Next()
+		checkErr(err)
+		if block.Height/7 == int(req.Count) && block.Height%7 == 0 {
+
+			break
+		}
+	}
 	for i := 6; i >= 0; i-- {
-		block, err := bci.Next() //6
+		block, err := bci.Next() // 6
+		log.Println("!")
 		checkErr(err)
 
 		log.Println("RSEncoding Block Height", block.Height)
@@ -316,48 +497,28 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 	}
 
 	err = enc.Encode(data)
-
 	checkErr(err)
 	ok, err := enc.Verify(data)
 	checkErr(err)
-
 	if ok == false {
 		log.Panicln("!@#!@#!@#!@#!@#!@#!@")
 	}
+
 	bci = bc.Iterator()
 
-	for i := 0; i < 7; i++ {
-		block, err := bci.Next() //6
-
+	for i := 0; ; i++ {
+		block, err := bci.Next()
 		checkErr(err)
-		if block.Height == checkList[i] {
-			err = bc.db.Update(func(tx *bolt.Tx) error {
-				b := tx.Bucket([]byte(blocksBucket))
-				blockInDb := b.Get(block.Hash)
-
-				if blockInDb == nil {
-					return nil
-				}
-				log.Println("삭제한 블럭 Height", DeserializeBlock(blockInDb).Height)
-				err := b.Delete(block.Hash)
-
-				if err != nil {
-					log.Panic(err)
-				}
-
-				checkErr(err)
-				return nil
-			})
-			checkErr(err)
+		log.Println(block.Height)
+		if block.Height/7 == int(req.Count) && block.Height%7 == 0 {
+			break
 		}
 	}
-
 	save := data[nodeId%3000]
-
 	end := 0
 	check := false
-	if req.Count != 0 {
-		err = bc.db.Update(func(tx *bolt.Tx) error {
+	if req.Count != 1 {
+		err = bc.db.View(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(blocksBucket))
 			c := b.Cursor()
 			if c != nil {
@@ -367,19 +528,15 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 				for keyBytes != nil {
 
 					if len(keyBytes) >= 4 && bytes.HasPrefix(keyBytes[:4], targetBytes) {
-						var keyCheck int
-						keyCheck = 0
-						log.Println(keyCheck)
-						for i := len(keyBytes) - 1; i >= 4; i-- {
 
+						log.Println(keyBytes)
+						for i := len(keyBytes) - 1; i >= 4; i-- {
+							log.Println(string(keyBytes[i]))
 							if keyBytes[i] == '~' {
 								check = true
-								keyCheck = i
-							} else if !check {
 
-								log.Println("현재 KeyBytes", string(keyBytes))
-								m := math.Pow(10, float64(len(keyBytes)-i-1))
-								end += int(keyBytes[i]-48) * int(m)
+							} else if !check {
+								end = int(req.Count) * 6
 							}
 						}
 
@@ -392,8 +549,8 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 		})
 		checkErr(err)
 
-		startIndex := "Hash" + strconv.Itoa(end+1) + "~" + strconv.Itoa(end+int(req.NF)+int(req.F))
-
+		startIndex := "Hash" + strconv.Itoa(end+1) + "~" + strconv.Itoa(end+int(req.NF)+int(req.F)-3) // -> 이게 잘못됨
+		log.Println(startIndex)
 		err = bc.db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(blocksBucket))
 			b.Put([]byte(startIndex), save)
@@ -401,10 +558,11 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 			return nil
 		})
 		checkErr(err)
+
 	} else {
 
-		startIndex := "Hash0~" + strconv.Itoa(9)
-
+		startIndex := "Hash0~" + strconv.Itoa(6)
+		log.Println(startIndex)
 		err = bc.db.Update(func(tx *bolt.Tx) error {
 			b := tx.Bucket([]byte(blocksBucket))
 			b.Put([]byte(startIndex), save)
@@ -413,8 +571,86 @@ func (s *server) RSEncoding(ctx context.Context, req *proto.RSEncodingRequest) (
 		})
 		checkErr(err)
 	}
+	bci = bc.Iterator()
+	for i := 0; ; i++ {
+		block, err := bci.Next()
+		checkErr(err)
+		log.Println(block.Height)
+		if block.Height/7 == int(req.Count) && block.Height%7 == 0 {
 
+			break
+		}
+	}
+	for i := 0; i < 7; i++ {
+		block, err := bci.Next() //6
+
+		checkErr(err)
+
+		err = bc.db.Update(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte(blocksBucket))
+			blockInDb := b.Get(block.Hash)
+
+			if blockInDb == nil {
+				return nil
+			}
+			log.Println("삭제한 블럭 Height", DeserializeBlock(blockInDb).Height)
+			err := b.Delete(block.Hash)
+
+			if err != nil {
+				log.Panic(err)
+			}
+
+			checkErr(err)
+			return nil
+		})
+		checkErr(err)
+
+	}
 	return &blockchain.RSEncodingResponse{}, nil
+}
+func (s *server) DeleteBlock(ctx context.Context, req *proto.RSEncodingRequest) (*proto.RSEncodingResponse, error) {
+	var checkList []int
+	bc := NewBlockchain(req.NodeId)
+	defer bc.db.Close()
+	bci := bc.Iterator()
+	log.Println("count", req.Count)
+	for i := 0; ; i++ {
+		block, err := bci.Next()
+		checkErr(err)
+		log.Println(block.Height)
+		if block.Height/7 == int(req.Count) && block.Height%7 == 0 {
+			log.Println("나누어진", block.Height)
+			break
+		}
+	}
+	for i := 0; i < 7; i++ {
+		block, err := bci.Next() //6
+		log.Println("block:", block.Height)
+		log.Println("checkList: ", checkList)
+		checkErr(err)
+
+		err = bc.db.Update(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte(blocksBucket))
+			blockInDb := b.Get(block.Hash)
+
+			if blockInDb == nil {
+				return nil
+			}
+			log.Println("삭제한 블럭 Height", DeserializeBlock(blockInDb).Height)
+			err := b.Delete(block.Hash)
+
+			if err != nil {
+				log.Panic(err)
+			}
+
+			checkErr(err)
+			return nil
+		})
+		checkErr(err)
+
+	}
+
+	return &proto.RSEncodingResponse{}, nil
 }
 func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingRequest) (*proto.RsReEncodingResponse, error) {
 
@@ -535,7 +771,7 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 		conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
 
 		log.Println(serverAddress)
-		if err != nil {
+		if err == nil {
 			log.Println(knownNodes[k], "에 연결 실패!")
 
 		} else if req.NodeId != knownNodes[k][10:] {
@@ -653,11 +889,72 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 	fmt.Printf("Total time taken: %s\n", elapsedTime2)
 	return &proto.DataResponse{Success: true}, nil
 }
-func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkTransactionRequest) (*proto.FindChunkTransactionReponse, error) {
 
+func (s *server) FindBlockTransaction(ctx context.Context, req *proto.FindChunkTransactionRequest) (*proto.FindChunkTransactionReponse, error) {
 	bc := NewBlockchainRead(req.NodeId)
 	defer bc.db.Close()
+	bci := bc.Iterator()
+	var transaction Transaction
 
+	for {
+		block, err := bci.Next()
+		if err != nil {
+			break
+		}
+
+		for _, tx := range block.Transactions {
+			if bytes.Compare(tx.ID, req.VinId) == 0 {
+				log.Println("Equal?")
+				log.Println(tx)
+				transaction = tx.TrimmedCopy()
+				return &proto.FindChunkTransactionReponse{
+					Transaction: convertToProtoTransaction(transaction)}, nil
+			}
+		}
+	}
+
+	return &proto.FindChunkTransactionReponse{}, nil
+
+}
+func (s *server) Sign(ctx context.Context, req *proto.ValidateRequest) (*proto.ValidateResponse, error) {
+	wallets, err := NewWallets("3000") // wallet.node_id 확인
+	if err != nil {
+		log.Panic(err)
+	}
+	wallet := wallets.GetWallet(req.HashId)
+	tx := convertToOneTransaction(req.Transaction)
+	tx2 := convertToOneTransaction(req.Tx)
+	prevTXs := make(map[string]Transaction)
+
+	prevTXs[req.HashId] = tx
+
+	var privKey ecdsa.PrivateKey
+	privKey = wallet.PrivateKey
+
+	tx2.Sign(privKey, prevTXs)
+
+	return &proto.ValidateResponse{Check: 1}, nil
+
+}
+func (s *server) Validate(ctx context.Context, req *proto.ValidateRequest) (*proto.ValidateResponse, error) {
+
+	tx := convertToOneTransaction(req.Transaction)
+	tx2 := convertToOneTransaction(req.Tx)
+	prevTXs := make(map[string]Transaction)
+	log.Println(tx.ID)
+	prevTXs[req.HashId] = tx
+	log.Println(req.HashId)
+	check := tx2.Verify(prevTXs)
+	if check == true {
+		return &proto.ValidateResponse{Check: 1}, nil
+	}
+	return &proto.ValidateResponse{Check: 0}, nil
+}
+func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkTransactionRequest) (*proto.FindChunkTransactionReponse, error) {
+	log.Println("FindChunkTransaction")
+	bc := NewBlockchainRead(req.NodeId)
+	defer bc.db.Close()
+	log.Println("DB는 잘열렸다.")
 	var data [][]byte
 	cnt := 0
 	var foundTx Transaction // 구조체 변수 선언
@@ -685,6 +982,7 @@ func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkT
 					cnt++
 
 					block := DeserializeBlock(data[cnt-1])
+
 					log.Println("블럭 높이:", block.Height)
 					for _, tx := range block.Transactions {
 						if bytes.Equal(tx.ID, req.VinId) {
@@ -693,7 +991,7 @@ func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkT
 							check = true
 
 							log.Println(req.NodeId, "에서 발견")
-							foundTx = tx.TrimmedCopy() // 찾은 트랜잭션의 값을 복사하여 할당
+							foundTx = tx.TrimmedCopy()
 							return nil
 						}
 
@@ -710,7 +1008,7 @@ func (s *server) FindChunkTransaction(ctx context.Context, req *proto.FindChunkT
 		return nil
 	})
 	checkErr(err)
-
+	log.Println(check)
 	if check {
 		return &proto.FindChunkTransactionReponse{
 			Transaction: convertToProtoTransaction(foundTx),
@@ -823,6 +1121,7 @@ func (s *server) DeleteMempool(ctx context.Context, req *proto.DeleteMempoolRequ
 
 	return &proto.DeleteMempoolResponse{}, nil
 }
+
 func (s *server) SendBlock(ctx context.Context, req *proto.SendBlockRequest) (*proto.SendBlockResponse, error) {
 	log.Println("블럭을 잘 전달받았음 ")
 	bc := NewBlockchain(req.NodeId)

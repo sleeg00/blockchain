@@ -19,7 +19,7 @@ message VersionResponse {
 
 message SendRequest {
   string node_to = 5;
-  Block Block =7;
+ 
 }
 
 message SendTransactionRequest {
@@ -63,7 +63,7 @@ message TXOutput {
 
 
 message SendResponse {
-    bytes byte = 1;
+  
 }
 
 message CreateWalletRequest {
@@ -188,6 +188,21 @@ message GetOneShardRequest {
 message GetOneShardResponse{
   bytes data = 1;
 }
+message ConnectServerRequest {
+   string node_id = 1;
+    Block Block =2;
+}
+message ConnectServerResponse{
+    bytes byte = 1;
+}
+message validateRequest{
+  string hash_id=1;
+  Transaction transaction = 2;
+  Transaction tx = 3;
+}
+message validateResponse {
+  int32 check = 1;
+}
 service BlockchainService {
 
  rpc Send(SendRequest) returns (SendResponse) {}
@@ -218,4 +233,11 @@ service BlockchainService {
   rpc DataTransfer(DataRequest) returns (DataResponse) {}
   rpc RsReEncoding(RsReEncodingRequest) returns (RsReEncodingResponse) {}
   rpc GetOneShard(GetOneShardRequest) returns (GetOneShardResponse){}
+  rpc SendServer(SendRequest) returns (SendResponse){}
+  rpc Connect(ConnectServerRequest) returns (ConnectServerResponse){}
+  rpc saveFileSystem(SendRequest) returns (SendResponse) {}
+  rpc DeleteBlock(RSEncodingRequest) returns (RSEncodingResponse){}
+  rpc FindBlockTransaction(FindChunkTransactionRequest) returns (FindChunkTransactionReponse){}
+  rpc Validate(validateRequest) returns (validateResponse) {}
+  rpc Sign(validateRequest) returns (validateResponse) {}
 }
