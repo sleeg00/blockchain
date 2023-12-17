@@ -23,7 +23,7 @@ func (cli *CLI) requestTransaction(from, to string, amount int, node_id string, 
 	// 서버에 요청 보내기
 	response1, err1 := cli.blockchain.SendTransaction(context.Background(), request)
 	if err1 != nil {
-		log.Panic("Error sending request to node %s: %v", node_id, err1)
+		//log.Panic("Error sending request to node %s: %v", node_id, err1)
 
 	}
 
@@ -68,7 +68,6 @@ func send(from, to string, amount int, node_id string, mineNow bool) (Block, *Bl
 
 	// TODO: ignore transaction if it's not valid
 	if !bc.VerifyTransaction(tx) {
-		log.Println(tx)
 		log.Panic("ERROR: Invalid transaction")
 	}
 

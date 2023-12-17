@@ -132,7 +132,7 @@ message DeleteMempoolRequest {}
 message DeleteMempoolResponse {}
 message GetShardRequest{
   string node_id = 1;
-  int32 height = 2;
+  repeated string hash = 2;
 }
 message GetShardResponse{
   repeated bytes bytes = 1;
@@ -161,7 +161,7 @@ message checkZombieResponse {
 }
 
 message DataRequest {
-  repeated int32 list = 1;
+  repeated string hash = 1;
   string node_id = 2;
 }
 
@@ -170,8 +170,7 @@ message DataResponse {
 }
 
 message RsReEncodingRequest {
-  int32 start =1;
-  int32 end = 2;
+  repeated string hash = 1;
   int32 NF = 3;
   int32 F = 4;
   string node_id = 5;

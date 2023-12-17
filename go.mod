@@ -11,7 +11,10 @@ require (
 )
 
 require (
+	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/google/pprof v0.0.0-20231212022811-ec68065c825e // indirect
+	github.com/ianlancetaylor/demangle v0.0.0-20231023195312-e2daf7ba7156 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.5 // indirect
 	golang.org/x/net v0.14.0 // indirect
 	golang.org/x/text v0.12.0 // indirect
@@ -22,6 +25,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/crypto v0.12.0
-	golang.org/x/sys v0.11.0 // indirect
+	golang.org/x/sys v0.15.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

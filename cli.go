@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os/exec"
+	"runtime"
+	"strings"
 	"time"
 
 	"os"
@@ -192,9 +195,20 @@ func (cli *CLI) Run() {
 			checkErr(err)
 		}
 
-		startTime := time.Now()
+		// 현재 CPU 사용률 퍼센트를 얻음
 
+		startTime := time.Now()
 		for k = 0; k < *sendNumberOfBlock; k++ {
+			cmd := exec.Command("ps", "-p", fmt.Sprintf("%d", os.Getpid()), "-o", "%cpu")
+			output, err := cmd.Output()
+			if err != nil {
+				fmt.Println("Error:", err)
+				return
+			}
+
+			cpuUsageStr := strings.TrimSpace(string(output))
+
+			fmt.Println("Current CPU Usage:", cpuUsageStr)
 			log.Println("k", k)
 
 			for i := 0; i < 10; i++ {
@@ -221,6 +235,7 @@ func (cli *CLI) Run() {
 
 		elapsedTime := time.Since(startTime)
 		fmt.Printf("Total time taken: %s\n", elapsedTime)
+
 	}
 	if fileCmd.Parsed() {
 		for i := 0; i < len(knownNodes); i++ {
@@ -274,9 +289,7 @@ func (cli *CLI) Run() {
 			nodeID:     nodeID,
 			blockchain: client,
 		}
-
 		cli.startNode(cli.nodeID, "")
-
 	}
 	if getBalanceCmd.Parsed() {
 		if *getBalanceAddress == "" {
@@ -359,9 +372,7 @@ func (cli *CLI) Run() {
 			invaildNodeCount := 10 - failNodesCheck
 			f = (invaildNodeCount - 1) / 3
 			NF = invaildNodeCount - f
-			log.Println(newblock.Height)
 
-			log.Println("sendBlock")
 			//만약 블럭이 7개가 쌓였으면 인코딩한다
 
 			// 새로운 슬라이스를 만들고 txs의 값을 복사
@@ -426,7 +437,6 @@ func (cli *CLI) Run() {
 			}
 
 			if newblock.Height%7 == 0 && newblock.Height != 0 {
-				log.Println("RsEncoding!!!!!")
 				RsEncoding(int32(newblock.Height/7), int32(3), int32(7))
 			}
 			// Your existing code...
@@ -593,4 +603,16 @@ func checkErr(err error) {
 		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
 		os.Exit(2)
 	}
+}
+func getCurrentCPUUsage() float64 {
+	var stat runtime.MemStats
+	runtime.ReadMemStats(&stat)
+
+	lastUsage := float64(stat.Sys) - float64(stat.HeapReleased)
+	total := float64(stat.Sys)
+
+	// CPU 사용률 계산
+	cpuUsage := (lastUsage / total) * 100
+
+	return cpuUsage
 }

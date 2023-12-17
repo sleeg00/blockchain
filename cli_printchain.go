@@ -48,7 +48,7 @@ func printChain(nodeID string) {
 		}
 	}
 
-	count := Height / 7
+	//count := Height / 7
 
 	cnt := 0
 
@@ -70,10 +70,10 @@ func printChain(nodeID string) {
 		log.Println(cli)
 
 		//여기서 지금 멈춤
-
+		var hash []string
 		request := &blockchain.GetShardRequest{
 			NodeId: knownNodes[k][10:],
-			Height: int32(count),
+			Hash:   hash,
 		}
 
 		response, err := cli.blockchain.GetShard(context.Background(), request)

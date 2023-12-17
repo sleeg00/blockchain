@@ -56,9 +56,7 @@ func (tx *Transaction) Hash() []byte {
 
 // Sign signs each input of a Transaction
 func (tx *Transaction) Sign(privKey ecdsa.PrivateKey, prevTXs map[string]Transaction) {
-	log.Println("sign")
 	if tx.IsCoinbase() {
-		log.Println("co")
 		return
 	}
 
@@ -134,9 +132,7 @@ func (tx *Transaction) TrimmedCopy() Transaction {
 
 // Verify verifies signatures of Transaction inputs
 func (tx *Transaction) Verify(prevTXs map[string]Transaction) bool {
-	log.Println("verfiy")
 	if tx.IsCoinbase() {
-		log.Println("????!@!@")
 		return true
 	}
 

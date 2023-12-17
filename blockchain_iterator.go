@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"log"
 
 	"github.com/boltdb/bolt"
 )
@@ -24,8 +23,7 @@ func (i *BlockchainIterator) Next() (*Block, error) {
 		encodedBlock = b.Get(i.currentHash)
 
 		if !(len(encodedBlock) > 0) {
-
-			return errors.New("fail")
+			return errors.New("final block")
 		}
 		block = DeserializeBlock(encodedBlock)
 
@@ -33,7 +31,7 @@ func (i *BlockchainIterator) Next() (*Block, error) {
 	})
 
 	if err != nil {
-		log.Println(err)
+		//	log.Println(err)
 		return block, errors.New("fail")
 	}
 

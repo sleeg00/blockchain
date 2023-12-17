@@ -103,7 +103,7 @@ func NewBlockchain(nodeID string) *Blockchain {
 	return &bc
 }
 func NewBlockchainRead(nodeID string) *Blockchain {
-	log.Println("NewBlcokchain :" + nodeID)
+	//log.Println("NewBlcokchain :" + nodeID)
 	dbFile := fmt.Sprintf(dbFile, nodeID)
 
 	if !dbExists(dbFile) {
@@ -169,23 +169,15 @@ func (bc *Blockchain) AddBlock(block *Block) {
 
 // Input TXID에 맞는 TX가 있는지 찾는디 //이걸 UTXO를 찾는 것으로 바꿔도 될 거 같다
 func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
-	log.Println("FindTransaction")
 	bci := bc.Iterator()
 
 	for {
 		block, err := bci.Next()
-
 		if err != nil {
 			break
 		}
-		log.Println(block.Height)
-
 		for _, tx := range block.Transactions {
 			if bytes.Compare(tx.ID, ID) == 0 {
-				var transaction Transaction
-				log.Println("Equal?")
-				transaction = tx.TrimmedCopy()
-				log.Println("transaciton", transaction)
 				return *tx, nil
 			}
 		}
@@ -233,16 +225,14 @@ func (bc *Blockchain) FindTransaction(ID []byte) (Transaction, error) {
 					resultx = convertFromProtoTransaction(tx)
 				}
 			}(i)
-			wg.Wait()
+
 		}
 		wg.Wait()
 		if resultx.ID != nil {
-			log.Println("result", resultx.ID)
 			break
 		}
 	}
-	log.Println("check:", check)
-	// 모든 고루틴이 종료될 때까지 대기
+
 	if check == true {
 		return resultx, nil
 	} else {
@@ -421,7 +411,6 @@ func (bc *Blockchain) MineBlock(transactions []*Transaction) *Block {
 
 // 트랜잭션 사인
 func (bc *Blockchain) SignTransaction(tx *Transaction, privKey ecdsa.PrivateKey) {
-	log.Println("SignTransaction")
 	prevTXs := make(map[string]Transaction)
 
 	for _, vin := range tx.Vin {
@@ -437,9 +426,7 @@ func (bc *Blockchain) SignTransaction(tx *Transaction, privKey ecdsa.PrivateKey)
 
 // 풀노드에서 트랜잭션 not Valid 판단
 func (bc *Blockchain) VerifyTransaction(tx *Transaction) bool {
-	log.Println("VerfiyTransaction")
 	if tx.IsCoinbase() {
-		log.Println("Coinbase!")
 		return true
 	}
 
