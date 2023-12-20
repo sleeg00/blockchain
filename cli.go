@@ -15,6 +15,7 @@ import (
 
 	"github.com/sleeg00/blockchain/proto"
 	blockchain "github.com/sleeg00/blockchain/proto"
+	"github.com/xuri/excelize/v2"
 	"google.golang.org/grpc"
 )
 
@@ -65,10 +66,12 @@ func main() {
 
 }
 
+var rs [100000][10]string
+var cnt int
+
 // Run parses command line arguments and processes commands
 func (cli *CLI) Run() {
-
-	fmt.Printf("New nodeID: %s\n", nodeID)
+	//fmt.Printf("New nodeID: %s\n", nodeID)
 	cli.validateArgs()
 
 	getBalanceCmd := flag.NewFlagSet("getbalance", flag.ExitOnError)
@@ -179,6 +182,7 @@ func (cli *CLI) Run() {
 		log.Println("복사완료")
 	}
 	if sendNumberOfBlockCmd.Parsed() {
+		cnt = 0
 		for i := 1; i < len(knownNodes); i++ {
 
 			sourceFile, err := os.Open("blockchain_3000.db")
@@ -195,24 +199,23 @@ func (cli *CLI) Run() {
 			checkErr(err)
 		}
 
-		// 현재 CPU 사용률 퍼센트를 얻음
+		var sendStartTime time.Time
+		var sendEndTime time.Duration
 
-		startTime := time.Now()
 		for k = 0; k < *sendNumberOfBlock; k++ {
-			cmd := exec.Command("ps", "-p", fmt.Sprintf("%d", os.Getpid()), "-o", "%cpu")
-			output, err := cmd.Output()
-			if err != nil {
-				fmt.Println("Error:", err)
-				return
-			}
+			for i := 0; i < 1; i++ {
 
-			cpuUsageStr := strings.TrimSpace(string(output))
+				cmd := exec.Command("ps", "-p", fmt.Sprintf("%d", os.Getpid()), "-o", "%cpu")
+				output, err := cmd.Output()
+				if err != nil {
+					fmt.Println("Error:", err)
+					return
+				}
 
-			fmt.Println("Current CPU Usage:", cpuUsageStr)
-			log.Println("k", k)
-
-			for i := 0; i < 10; i++ {
-
+				cpuUsageStr := strings.TrimSpace(string(output))
+				log.Println("Current CPU Usage:" + cpuUsageStr)
+				rs[cnt][2] = cpuUsageStr
+				sendStartTime = time.Now()
 				nodeID = "3000"
 				originalArgs := os.Args
 				os.Args = []string{
@@ -226,17 +229,44 @@ func (cli *CLI) Run() {
 					"1",
 					"-mine",
 				}
-
 				cli.Run()
 				os.Args = originalArgs
 			}
+			elapsedTime := time.Since(sendStartTime)
 
+			cnt++
+			sendEndTime += elapsedTime
+			rs[cnt][0] = sendEndTime.String()
+			fmt.Printf("Total time taken: %s\n", elapsedTime)
+			fmt.Println("Send Total time taken : %s\n", sendEndTime)
+		}
+		f := excelize.NewFile()
+		sheetName := "성능평가"
+		sheet, err := f.NewSheet(sheetName)
+		if err != nil {
+			fmt.Println(err)
+			return
 		}
 
-		elapsedTime := time.Since(startTime)
-		fmt.Printf("Total time taken: %s\n", elapsedTime)
+		// print header
+		f.SetCellValue(sheetName, "A1", "Send Total Time")
+		f.SetCellValue(sheetName, "D1", "RsEncoding Total Time")
+		f.SetCellValue(sheetName, "F1", "CPU Usages")
+		for i, row := range rs {
+			f.SetCellValue(sheetName, fmt.Sprintf("A%d", i+2), row[0])
+			f.SetCellValue(sheetName, fmt.Sprintf("D%d", i+2), row[1])
+			f.SetCellValue(sheetName, fmt.Sprintf("E%d", i+2), row[2])
+		}
+		filename := fmt.Sprintf("%s.xlsx", time.Now().Format("2006-01-02-1504"))
 
+		f.SetActiveSheet(sheet)
+		if err := f.SaveAs(filename); err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println("생성 완료")
+		return
 	}
+
 	if fileCmd.Parsed() {
 		for i := 0; i < len(knownNodes); i++ {
 			serverAddress := fmt.Sprintf("localhost:%s", knownNodes[i][10:])

@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
-	"fmt"
 	"math"
 	"math/big"
 )
@@ -53,15 +52,15 @@ func (pow *ProofOfWork) Run() (int, []byte) {
 	var hash [32]byte
 	nonce := 0
 
-	fmt.Printf("Mining a new block")
+	//fmt.Printf("Mining a new block")
 
 	data := pow.prepareData(nonce)
 
 	hash = sha256.Sum256(data)
-	fmt.Printf("\r%x", hash)
+	//fmt.Printf("\r%x", hash)
 	hashInt.SetBytes(hash[:])
 
-	fmt.Print("\n\n")
+	//fmt.Print("\n\n")
 
 	return nonce, hash[:]
 }

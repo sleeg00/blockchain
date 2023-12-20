@@ -5,15 +5,20 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/sleeg00/blockchain/proto"
 	blockchain "github.com/sleeg00/blockchain/proto"
 	"google.golang.org/grpc"
 )
 
+var rsTotalTime time.Duration
+
 func RsEncoding(count int32, f int32, NF int32) {
 	log.Println("RS")
 	var wg sync.WaitGroup
+
+	rsEncodingStartTime := time.Now()
 	for i := 0; i < len(knownNodes); i++ {
 		wg.Add(1)
 		go func(i int) {
@@ -43,7 +48,12 @@ func RsEncoding(count int32, f int32, NF int32) {
 			}
 		}(i)
 	}
+
 	wg.Wait()
+	rsEncodingTime := time.Since(rsEncodingStartTime)
+	fmt.Println("Rs Encoding Total Time : %s\n", rsEncodingTime)
+	rsTotalTime += rsEncodingTime
+	rs[cnt][1] = rsTotalTime.String() //인코딩 총 시간
 }
 
 /*
