@@ -682,26 +682,58 @@ var elapsedTime2 time.Duration
 var endExcel time.Duration
 
 func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingRequest) (*proto.RsReEncodingResponse, error) {
-	startTime2 := time.Now()
+
 	nodeId, err := strconv.Atoi(req.NodeId)
 	checkErr(err)
 
 	bc := NewBlockchain(req.NodeId)
 	defer bc.db.Close()
-
+	var rsDecodeEndTime time.Duration
+	rsDecodeEndTime = 0
 	enc, err := reedsolomon.New(7, 2) //비잔틴 장애 내성 가지도록 설계
 	checkErr(err)
+	im := 0
+	type Rs [][]byte
+	var myList []Rs
+	rsDecodeTime := time.Now()
+	for {
+		Rs := make([][]byte, 10)
+		checkCnt := 0
+		for i := im; i < im+10; i++ {
+			if checkCnt == 0 {
+				Rs[checkCnt] = nil
+			} else {
+				Rs[checkCnt] = req.Data[i]
+			}
+			checkCnt++
+		}
+		enc.Reconstruct(Rs)
+		im += 10
+		myList = append(myList, Rs)
 
+		if im == 1000 {
+			break
+		}
+	}
+	rsDecodeEndTime = time.Since(rsDecodeTime)
+	rs_server[cnt2][1] = rsDecodeEndTime.String()
+	log.Println("디코딩 전체시간", rsDecodeEndTime)
+	startTime2 := time.Now()
+	type RsDate [][]byte
+	var totalData []RsDate
 	var RsData [][]byte
-	RsData = make([][]byte, 10)
-	RsData[0] = nil
-	for i := 1; i <= 7; i++ {
-		RsData[i] = req.Data[i]
+	for k := 0; k < 10; k++ {
+		RsData = make([][]byte, 9)
+
+		for i := 0; i < 7; i++ {
+			RsData[i] = myList[k][i]
+		}
+		for i := 7; i < 9; i++ {
+			RsData[i] = make([]byte, 2048)
+		}
+		enc.Encode(RsData)
+		totalData = append(totalData, RsData)
 	}
-	for i := 8; i <= 9; i++ {
-		RsData[i] = make([]byte, 2048)
-	}
-	enc.Encode(RsData)
 	var start int
 	var end int
 	var check int
@@ -746,7 +778,7 @@ func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingReques
 					err = b.Delete([]byte("Hash" + (strconv.Itoa(start) + "~" + strconv.Itoa(end))))
 					checkErr(err)
 					if nodeId%3000 < 9 {
-						save := RsData[nodeId%3000]
+						save := totalData[check][nodeId%3000]
 						b.Put([]byte("Hash"+(strconv.Itoa(start)+"~"+strconv.Itoa(end))), save)
 					}
 					check++
@@ -754,7 +786,7 @@ func (s *server) RsReEncoding(ctx context.Context, req *proto.RsReEncodingReques
 				}
 
 				keyBytes, _ = c.Prev()
-				if keyBytes == nil || check == 9 {
+				if keyBytes == nil || check == 100 {
 					return nil
 				}
 
@@ -776,8 +808,10 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 	cnt2 = -1
 	log.Println("DataTransfer")
 	cnt := 0
-	data := make([][]byte, 1000)
+	data := make([][]byte, 10000)
+
 	enc, err := reedsolomon.New(7, 3)
+	log.Println(enc)
 	checkErr(err)
 	cnt = len(req.Hash)
 	var hash []string
@@ -813,7 +847,7 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 
 				size := len(bytes)
 				cnt = 0
-
+				log.Println("size", size)
 				for j := 0; ; j++ {
 					if cnt == size {
 						break
@@ -825,6 +859,7 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 			}
 		}
 	}
+	log.Println(len(data))
 	getShardEndTime := time.Since(getShardTime)
 	cnt2++
 	rs_server[cnt2][0] = getShardEndTime.String()
@@ -834,29 +869,12 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 
 	//RsReEncoding (재인코딩) (7,2)
 	rsReEncodeTime := time.Now()
-	rsDecodeTime := time.Now()
-	RsData := make([][]byte, 10)
-	im := 0
-	for j := 1; j < len(knownNodes); j++ {
-		checkCnt := 0
 
-		for i := im; i < im+10; i++ {
-			if checkCnt == 0 {
-				RsData[checkCnt] = nil
-			} else {
-				RsData[checkCnt] = data[i]
-			}
-			checkCnt++
-		}
-		im += 10
-		log.Println(enc.Verify(RsData))
-		enc.Reconstruct(RsData)
-		log.Println(enc.Verify(RsData))
-		rsDecodeEndTime := time.Since(rsDecodeTime)
-		rs_server[cnt2][1] = rsDecodeEndTime.String()
+	for j := 1; j < len(knownNodes); j++ {
 		wg.Add(1)
 		go func(j int) {
 			defer wg.Done()
+
 			serverAddress := fmt.Sprintf("localhost:%s", knownNodes[j][10:])
 			conn, err := grpc.Dial(serverAddress, grpc.WithInsecure())
 			if err != nil {
@@ -873,7 +891,7 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 				F:      2,
 				NF:     7,
 				Hash:   hash,
-				Data:   RsData,
+				Data:   data,
 			})
 			if err != nil {
 				log.Panic(err)
@@ -881,6 +899,7 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 			if response.Success {
 				log.Println(response.Success)
 			}
+
 		}(j)
 	}
 
@@ -889,7 +908,6 @@ func (s *server) DataTransfer(ctx context.Context, req *proto.DataRequest) (*pro
 	rsReEncodeEndTime = time.Since(rsReEncodeTime)
 	fmt.Printf("Total time taken: %s\n", rsReEncodeEndTime)
 	rs_server[cnt2][2] = rsReEncodeEndTime.String()
-	rs_server_process[cnt3][3] = elapsedTime2.String()
 
 	f := excelize.NewFile()
 	sheetName := "성능평가_" + "총_시간_"
@@ -1088,7 +1106,7 @@ func (s *server) GetShard(ctx context.Context, req *proto.GetShardRequest) (*pro
 						}
 					}
 					keyBytes, _ = c.Prev()
-					if keyBytes == nil || i == (len(req.Hash)) {
+					if keyBytes == nil || i == 100 {
 						return nil
 					}
 				}
