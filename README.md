@@ -5,16 +5,16 @@
 - 한국정보처리학회 ACK 2023(추계학술발표대회) 발표 논문에 사용되었습니다.
   - 부경대 총장상 수상
 ## ⏱️ 개발 기간
-- 23-07 ~ 23.09
+- 23-07 ~ 24.01
 ## ⚙️ 개발 환경
 - Go 1.18.9 
 - Database: Bolt DB
 - IDE: VScode
 - Open Source Link: https://github.com/Jeiwan/blockchain_go.git
 ## 🔦 기존 오픈소스에서 추가한 것
-- TCP 통신 -> gRPC로 번경
+- gRPC 적용
 - Reed-Solomon 부호화 적용
-- Transaction 검증 방식 변경
+- Transaction 검증 방식 변경 *Go 루틴 추가
 - ... 
 
 ## 🖼️ 주요 그림
