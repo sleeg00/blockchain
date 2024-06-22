@@ -20,7 +20,15 @@
 - ... 
 
 ## 🖼️ 주요 그림
-<img width="475" alt="스크린샷 2023-11-16 오후 4 17 28" src="https://github.com/sleeg00/blockchain/assets/96710732/46468a99-1c63-4be3-89ec-4367cd9a8bee">
-<img width="320" alt="스크린샷 2023-11-16 오후 4 17 44" src="https://github.com/sleeg00/blockchain/assets/96710732/603bc79c-0d4a-4cda-96c3-fb7d6b047b7c">
-<img width="310" alt="스크린샷 2023-11-16 오후 4 17 53" src="https://github.com/sleeg00/blockchain/assets/96710732/755cb5e4-f647-45e0-a839-5365f46ec5ea">
-<img width="250" alt="스크린샷 2023-11-16 오후 4 18 01" src="https://github.com/sleeg00/blockchain/assets/96710732/034fcdc6-bfb5-4c8a-9c59-21fc0f2ec70b">
+### 노드별 블록 스토리지 효율성 비교 & 블록 전송 성능 비교
+<img width="475" alt="스크린샷 2023-11-16 오후 4 17 28" src="https://github.com/sleeg00/blockchain/assets/96710732/421ba419-23e8-46e4-93f1-b89a8a7d62b2">
+<img width="475" alt="스크린샷 2023-11-16 오후 4 17 44" src="https://github.com/sleeg00/blockchain/assets/96710732/0a365604-8944-4bf6-820d-4425ac48e50d">
+
+### CPU 사용량 비교
+<img width="615" alt="스크린샷 2023-11-16 오후 4 17 53" src="https://github.com/sleeg00/blockchain/assets/96710732/7ed9e52f-85d0-4a08-97fa-d4a953c84a8d">
+
+### 블록 수에 따른 블록 복구 시간
+<img width="815" alt="스크린샷 2024-06-22 오후 4 24 40" src="https://github.com/sleeg00/blockchain/assets/96710732/4c1e7475-bae6-45ca-886f-1505624f94a8">
+
+### 블록 인코딩 및 디코딩을 위한 시퀀스 다이어그램
+<img width="615" alt="스크린샷 2024-06-22 오후 4 25 32" src="https://github.com/sleeg00/blockchain/assets/96710732/b82281c0-4b86-4d28-81f0-ab47021b9760">
